@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Porównanie aut</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="hero compact">
+      <div>
+        <h1>Porównanie ofert</h1>
+        <p>Zestawienie najważniejszych parametrów.</p>
+      </div>
+      <a href="/" class="btn btn-secondary">← Wróć do listy</a>
+    </header>
+
+    <% if (!listings.length) { %>
+      <div class="alert error">Brak danych do porównania.</div>
+    <% } else { %>
+      <section class="compare-grid">
+        <table class="compare-table">
+          <tbody>
+            <tr>
+              <th>Parametr</th>
+              <% listings.forEach(function(listing) { %>
+                <td>
+                  <strong><%= listing.title || 'Bez tytułu' %></strong>
+                  <% if (listing.mainImage) { %>
+                    <img class="thumb" src="<%= listing.mainImage.local_path || listing.mainImage.original_url %>" alt="Zdjęcie" />
+                  <% } %>
+                </td>
+              <% }) %>
+            </tr>
+            <% const fields = [
+              ['Cena', (l) => l.price ? Number(l.price).toLocaleString('pl-PL') + ' ' + (l.currency || 'PLN') : '-'],
+              ['Przebieg', (l) => l.mileage ? Number(l.mileage).toLocaleString('pl-PL') + ' km' : '-'],
+              ['Rok produkcji', (l) => l.production_year || '-'],
+              ['Rok sprowadzenia', (l) => l.import_year || '-'],
+              ['Lokalizacja', (l) => l.location || '-'],
+              ['Telefon', (l) => l.phone || '-'],
+              ['Paliwo', (l) => l.fuel_type || '-'],
+              ['Skrzynia', (l) => l.gearbox || '-'],
+              ['Pojemność', (l) => l.engine_capacity || '-'],
+              ['Moc (KM)', (l) => l.power_hp || '-'],
+              ['Nadwozie', (l) => l.body_type || '-'],
+              ['Napęd', (l) => l.drive_type || '-'],
+              ['Kolor', (l) => l.color || '-'],
+              ['Status', (l) => l.status || '-'],
+              ['Ocena subiektywna', (l) => (l.personal_rating || '-') + '/5'],
+              ['Ocena historii', (l) => (l.history_rating || '-') + '/5'],
+              ['Ocena AI', (l) => (l.ai_rating || '-') + '/5'],
+              ['Komentarz', (l) => l.personal_comment || '-'],
+              ['Komentarz AI', (l) => l.ai_comment || '-'],
+              ['Historia pojazdu', (l) => l.history_note || '-'],
+              ['Opis', (l) => l.description || '-']
+            ]; %>
+
+            <% fields.forEach(function(field) { %>
+              <tr>
+                <th><%= field[0] %></th>
+                <% listings.forEach(function(listing) { %>
+                  <td><%= field[1](listing) %></td>
+                <% }) %>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </section>
+    <% } %>
+  </div>
+</body>
+</html>

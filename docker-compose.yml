@@ -1,0 +1,46 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: car_compare
+      MYSQL_USER: carapp
+      MYSQL_PASSWORD: carapp
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: carapp
+      DB_PASSWORD: carapp
+      DB_NAME: car_compare
+      IMAGE_DIR: /app/data/images
+      BASE_URL: http://localhost:3000
+    ports:
+      - "${APP_PORT:-18080}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app-images:/app/data/images
+
+volumes:
+  mysql-data:
+  app-images:

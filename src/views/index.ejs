@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Porównywarka samochodów</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div>
+        <h1>Porównywarka samochodów</h1>
+        <p>Dodawaj ogłoszenia z URL i porównuj auta w jednym miejscu.</p>
+      </div>
+      <div class="hero-actions">
+        <button class="btn btn-primary" id="openImportModal">+ Dodaj z URL</button>
+        <button class="btn btn-secondary" id="openManualModal">+ Dodaj ręcznie</button>
+      </div>
+    </header>
+
+    <% if (message) { %>
+      <div class="alert success"><%= message %></div>
+    <% } %>
+    <% if (error) { %>
+      <div class="alert error"><%= error %></div>
+    <% } %>
+
+    <%
+      const selectedStatusSet = new Set(selectedStatuses || []);
+
+      function nextSortDir(column) {
+        return sortBy === column && sortDir === 'asc' ? 'desc' : 'asc';
+      }
+
+      function sortIndicator(column) {
+        if (sortBy !== column) return '↕';
+        return sortDir === 'asc' ? '↑' : '↓';
+      }
+
+      function buildSortHref(column) {
+        const params = new URLSearchParams();
+        (selectedStatuses || []).forEach((statusValue) => params.append('status', statusValue));
+        if (q) params.set('q', q);
+        if (origin) params.set('origin', origin);
+        params.set('sort_by', column);
+        params.set('sort_dir', nextSortDir(column));
+        return '/?' + params.toString();
+      }
+    %>
+
+    <section class="toolbar">
+      <form method="get" action="/" class="filter-form">
+        <fieldset class="status-filter-group">
+          <legend>Pokaż statusy:</legend>
+          <% statusOptions.forEach(function(opt) { %>
+            <label class="status-filter-item">
+              <input type="checkbox" name="status" value="<%= opt %>" <%= selectedStatusSet.has(opt) ? 'checked' : '' %> />
+              <span><%= opt %></span>
+            </label>
+          <% }) %>
+        </fieldset>
+        <input
+          type="search"
+          name="q"
+          value="<%= q || '' %>"
+          placeholder="Szukaj: tytuł, URL, lokalizacja"
+          aria-label="Szukaj ogłoszeń"
+        />
+        <input type="text" id="myLocation" name="origin" value="<%= origin || '' %>" placeholder="Twoja lokalizacja (np. Banino, Polska)" />
+        <button class="btn btn-small" type="submit">Szukaj</button>
+      </form>
+      <button class="btn btn-dark" id="compareSelected">Porównaj zaznaczone</button>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('created_at') %>">
+                Dodano <span class="sort-indicator"><%= sortIndicator('created_at') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('title') %>">
+                Auto <span class="sort-indicator"><%= sortIndicator('title') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('price') %>">
+                Cena <span class="sort-indicator"><%= sortIndicator('price') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('mileage') %>">
+                Przebieg <span class="sort-indicator"><%= sortIndicator('mileage') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('location') %>">
+                Lokalizacja <span class="sort-indicator"><%= sortIndicator('location') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('phone') %>">
+                Kontakt <span class="sort-indicator"><%= sortIndicator('phone') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('production_year') %>">
+                Rok prod. <span class="sort-indicator"><%= sortIndicator('production_year') %></span>
+              </a>
+            </th>
+            <th>
+              <button class="sort-link sort-button" id="sortByRoute" type="button" data-dir="asc">
+                Odległość / dojazd <span class="sort-indicator" id="routeSortIndicator">↕</span>
+              </button>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('status') %>">
+                Status <span class="sort-indicator"><%= sortIndicator('status') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('personal_rating') %>">
+                Ocena <span class="sort-indicator"><%= sortIndicator('personal_rating') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('history_rating') %>">
+                Historia <span class="sort-indicator"><%= sortIndicator('history_rating') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('ai_rating') %>">
+                Ocena AI <span class="sort-indicator"><%= sortIndicator('ai_rating') %></span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="<%= buildSortHref('reviewed_detailed') %>">
+                Postęp <span class="sort-indicator"><%= sortIndicator('reviewed_detailed') %></span>
+              </a>
+            </th>
+            <th>Akcje</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!listings.length) { %>
+            <tr>
+              <td colspan="14" class="empty">Brak ogłoszeń. Dodaj pierwsze auto.</td>
+            </tr>
+          <% } %>
+
+          <% listings.forEach(function(listing) { %>
+            <tr
+              data-listing-id="<%= listing.id %>"
+              data-location="<%= listing.location || '' %>"
+              data-route-origin="<%= listing.route_origin || '' %>"
+            >
+              <td>
+                <input type="checkbox" class="compare-check" value="<%= listing.id %>" />
+              </td>
+              <td>
+                <div class="cell-title"><%= listing.title || 'Bez tytułu' %></div>
+                <a href="<%= listing.source_url %>" target="_blank" rel="noopener noreferrer" class="source-link">Źródło</a>
+                <% if (listing.images && listing.images.length) { %>
+                  <img src="<%= listing.images[0].local_path || listing.images[0].original_url %>" alt="Zdjęcie auta" class="thumb" />
+                <% } %>
+              </td>
+              <td><%= listing.price ? Number(listing.price).toLocaleString('pl-PL') + ' ' + (listing.currency || 'PLN') : '-' %></td>
+              <td><%= listing.mileage ? Number(listing.mileage).toLocaleString('pl-PL') + ' km' : '-' %></td>
+              <td><%= listing.location || '-' %></td>
+              <td><%= listing.phone || '-' %></td>
+              <td><%= listing.production_year || '-' %></td>
+              <td
+                class="route-cell"
+                data-distance-value="<%= listing.route_cache_version === routeCacheVersion ? (listing.route_distance_km ?? '') : '' %>"
+                data-duration-value="<%= listing.route_cache_version === routeCacheVersion ? (listing.route_duration_min ?? '') : '' %>"
+              >
+                <% if (listing.route_cache_version === routeCacheVersion && listing.route_distance_km != null && listing.route_duration_min != null) { %>
+                  <div><%= Number(listing.route_distance_km).toLocaleString('pl-PL') %> km / <%= Number(listing.route_duration_min) %> min</div>
+                <% } else { %>
+                  <div>-</div>
+                <% } %>
+                <% if (!(listing.route_cache_version === routeCacheVersion && listing.route_distance_km != null && listing.route_duration_min != null)) { %>
+                  <button class="btn btn-small route-calc-btn" type="button" data-id="<%= listing.id %>">Przelicz</button>
+                <% } %>
+              </td>
+              <td>
+                <div class="status-icons">
+                  <span
+                    class="status-dot status-<%= (listing.status || 'Nowe').toLowerCase().replace(/\s+/g, '-') %>"
+                    title="<%= listing.status || 'Nowe' %>"
+                  ></span>
+                  <% if (listing.status === 'Odrzucone') { %>
+                    <span class="status-mark" title="Odrzucone">✖</span>
+                  <% } %>
+                </div>
+              </td>
+              <td>
+                <div class="stars" aria-label="Ocena subiektywna">
+                  <% for (let i = 1; i <= 5; i += 1) { %>
+                    <form method="post" action="/listings/<%= listing.id %>/rating" class="inline-form">
+                      <input type="hidden" name="field" value="personal_rating" />
+                      <input type="hidden" name="value" value="<%= i %>" />
+                      <button
+                        type="submit"
+                        class="star-btn <%= (listing.personal_rating || 0) >= i ? 'active' : '' %>"
+                        title="Ustaw ocenę: <%= i %>/5"
+                      >★</button>
+                    </form>
+                  <% } %>
+                </div>
+              </td>
+              <td>
+                <div class="stars" aria-label="Ocena historii">
+                  <% for (let i = 1; i <= 5; i += 1) { %>
+                    <form method="post" action="/listings/<%= listing.id %>/rating" class="inline-form">
+                      <input type="hidden" name="field" value="history_rating" />
+                      <input type="hidden" name="value" value="<%= i %>" />
+                      <button
+                        type="submit"
+                        class="star-btn <%= (listing.history_rating || 0) >= i ? 'active' : '' %>"
+                        title="Ustaw ocenę historii: <%= i %>/5"
+                      >★</button>
+                    </form>
+                  <% } %>
+                </div>
+              </td>
+              <td>
+                <div class="stars" aria-label="Ocena AI">
+                  <% for (let i = 1; i <= 5; i += 1) { %>
+                    <form method="post" action="/listings/<%= listing.id %>/rating" class="inline-form">
+                      <input type="hidden" name="field" value="ai_rating" />
+                      <input type="hidden" name="value" value="<%= i %>" />
+                      <button
+                        type="submit"
+                        class="star-btn <%= (listing.ai_rating || 0) >= i ? 'active' : '' %>"
+                        title="Ustaw ocenę AI: <%= i %>/5"
+                      >★</button>
+                    </form>
+                  <% } %>
+                </div>
+              </td>
+              <td>
+                <div class="progress-icons">
+                  <form method="post" action="/listings/<%= listing.id %>/flag" class="inline-form">
+                    <input type="hidden" name="field" value="reviewed_detailed" />
+                    <input type="hidden" name="value" value="<%= listing.reviewed_detailed ? 0 : 1 %>" />
+                    <button type="submit" class="icon-btn <%= listing.reviewed_detailed ? 'active' : '' %>" title="Przejrzane dokładnie">👁</button>
+                  </form>
+                  <form method="post" action="/listings/<%= listing.id %>/flag" class="inline-form">
+                    <input type="hidden" name="field" value="contacted" />
+                    <input type="hidden" name="value" value="<%= listing.contacted ? 0 : 1 %>" />
+                    <button type="submit" class="icon-btn <%= listing.contacted ? 'active' : '' %>" title="Kontakt wykonany">☎</button>
+                  </form>
+                  <form method="post" action="/listings/<%= listing.id %>/flag" class="inline-form">
+                    <input type="hidden" name="field" value="checked_offer" />
+                    <input type="hidden" name="value" value="<%= listing.checked_offer ? 0 : 1 %>" />
+                    <button type="submit" class="icon-btn <%= listing.checked_offer ? 'active' : '' %>" title="Ogłoszenie sprawdzone">✓</button>
+                  </form>
+                  <form method="post" action="/listings/<%= listing.id %>/flag" class="inline-form">
+                    <input type="hidden" name="field" value="to_view_live" />
+                    <input type="hidden" name="value" value="<%= listing.to_view_live ? 0 : 1 %>" />
+                    <button type="submit" class="icon-btn <%= listing.to_view_live ? 'active' : '' %>" title="Do obejrzenia na żywo">🚗</button>
+                  </form>
+                </div>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <form method="post" action="/listings/<%= listing.id %>/reject" class="inline-form">
+                    <button class="btn btn-small btn-danger" type="submit" title="Odrzuć">✖</button>
+                  </form>
+                  <form method="post" action="/listings/<%= listing.id %>/delete" class="inline-form" onsubmit="return confirm('Usunąć ogłoszenie?');">
+                    <button class="btn btn-small btn-ghost" type="submit" title="Usuń">🗑</button>
+                  </form>
+                  <button class="btn btn-small edit-toggle" data-id="<%= listing.id %>" type="button">Edytuj</button>
+                </div>
+              </td>
+            </tr>
+
+            <tr id="edit-<%= listing.id %>" class="edit-row hidden">
+              <td colspan="14">
+                <form method="post" action="/listings/<%= listing.id %>/update" class="edit-grid">
+                  <label>Ocena subiektywna (1-5)<input type="number" min="1" max="5" name="personal_rating" value="<%= listing.personal_rating || '' %>" /></label>
+                  <label>Ocena historii (1-5)<input type="number" min="1" max="5" name="history_rating" value="<%= listing.history_rating || '' %>" /></label>
+                  <label>Ocena AI (1-5)<input type="number" min="1" max="5" name="ai_rating" value="<%= listing.ai_rating || '' %>" /></label>
+                  <label>Telefon<input type="text" name="phone" value="<%= listing.phone || '' %>" /></label>
+                  <label>Komentarz osobisty<textarea name="personal_comment"><%= listing.personal_comment || '' %></textarea></label>
+                  <label>Komentarz AI<textarea name="ai_comment"><%= listing.ai_comment || '' %></textarea></label>
+                  <label>Historia pojazdu<textarea name="history_note"><%= listing.history_note || '' %></textarea></label>
+                  <div class="edit-actions"><button class="btn btn-primary" type="submit">Zapisz</button></div>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <div class="modal" id="importModal" hidden>
+    <div class="modal-content">
+      <h2>Dodaj ogłoszenie z URL</h2>
+      <form method="post" action="/import" class="duplicate-check-form">
+        <label>URL ogłoszenia (otomoto / autoplac)
+          <input type="url" name="source_url" required placeholder="https://www.otomoto.pl/..." />
+        </label>
+        <input type="hidden" name="confirm_duplicate" value="0" />
+        <input type="hidden" name="current_origin" value="<%= origin || '' %>" class="current-origin-input" />
+        <div class="modal-actions">
+          <button class="btn btn-primary" type="submit">Importuj</button>
+          <button class="btn modal-close" data-modal-id="importModal" type="button">Anuluj</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="manualModal" hidden>
+    <div class="modal-content wide">
+      <h2>Dodaj auto ręcznie</h2>
+      <form method="post" action="/listings" class="manual-grid duplicate-check-form">
+        <label>Tytuł<input type="text" name="title" /></label>
+        <label>URL źródła<input type="url" name="source_url" placeholder="opcjonalnie" /></label>
+        <input type="hidden" name="confirm_duplicate" value="0" />
+        <input type="hidden" name="current_origin" value="<%= origin || '' %>" class="current-origin-input" />
+        <label>Cena<input type="number" step="0.01" name="price" /></label>
+        <label>Waluta<input type="text" name="currency" value="PLN" /></label>
+        <label>Przebieg<input type="number" name="mileage" /></label>
+        <label>Lokalizacja<input type="text" name="location" /></label>
+        <label>Telefon<input type="text" name="phone" /></label>
+        <label>Rok produkcji<input type="number" name="production_year" /></label>
+        <label>Rok sprowadzenia<input type="number" name="import_year" /></label>
+        <label>Paliwo<input type="text" name="fuel_type" /></label>
+        <label>Skrzynia<input type="text" name="gearbox" /></label>
+        <label>Pojemność<input type="text" name="engine_capacity" /></label>
+        <label>Moc (KM)<input type="number" name="power_hp" /></label>
+        <label>Typ nadwozia<input type="text" name="body_type" /></label>
+        <label>Napęd<input type="text" name="drive_type" /></label>
+        <label>Kolor<input type="text" name="color" /></label>
+        <label>Status
+          <select name="status">
+            <% statusOptions.forEach(function(opt) { %>
+              <option value="<%= opt %>"><%= opt %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label>Ocena subiektywna (1-5)<input type="number" min="1" max="5" name="personal_rating" /></label>
+        <label>Ocena historii (1-5)<input type="number" min="1" max="5" name="history_rating" /></label>
+        <label>Ocena AI (1-5)<input type="number" min="1" max="5" name="ai_rating" /></label>
+        <label class="full">Opis<textarea name="description"></textarea></label>
+        <label class="full">Komentarz osobisty<textarea name="personal_comment"></textarea></label>
+        <label class="full">Komentarz AI<textarea name="ai_comment"></textarea></label>
+        <label class="full">Historia pojazdu<textarea name="history_note"></textarea></label>
+        <div class="modal-actions full">
+          <button class="btn btn-primary" type="submit">Dodaj auto</button>
+          <button class="btn modal-close" data-modal-id="manualModal" type="button">Anuluj</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const SCROLL_RESTORE_KEY = 'index_scroll_restore_y';
+
+    (function restoreScrollPosition() {
+      const raw = sessionStorage.getItem(SCROLL_RESTORE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      sessionStorage.removeItem(SCROLL_RESTORE_KEY);
+      const y = Number(raw);
+      if (!Number.isFinite(y) || y < 0) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        window.scrollTo(0, y);
+      });
+    })();
+
+    function openEditModal(id) {
+      const row = document.getElementById(`edit-${id}`);
+      row.classList.toggle('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).hidden = true;
+    }
+
+    document.getElementById('openImportModal').addEventListener('click', function () {
+      document.getElementById('importModal').hidden = false;
+    });
+
+    document.getElementById('openManualModal').addEventListener('click', function () {
+      document.getElementById('manualModal').hidden = false;
+    });
+
+    document.getElementById('compareSelected').addEventListener('click', function () {
+      const ids = Array.from(document.querySelectorAll('.compare-check:checked')).map((el) => el.value);
+      if (!ids.length) {
+        alert('Zaznacz co najmniej 1 ogłoszenie');
+        return;
+      }
+      window.location.href = '/compare?ids=' + ids.join(',');
+    });
+
+    document.querySelectorAll('.edit-toggle').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        openEditModal(btn.dataset.id);
+      });
+    });
+
+    document.querySelectorAll('.modal-close').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        closeModal(btn.dataset.modalId);
+      });
+    });
+
+    document.querySelectorAll('.modal').forEach((modal) => {
+      modal.addEventListener('click', function (event) {
+        if (event.target === modal) {
+          modal.hidden = true;
+        }
+      });
+    });
+
+    const myLocationInput = document.getElementById('myLocation');
+    const sortByRouteButton = document.getElementById('sortByRoute');
+    const routeSortIndicator = document.getElementById('routeSortIndicator');
+
+    const filterForm = document.querySelector('.filter-form');
+    const savedOrigin = localStorage.getItem('route_origin') || '';
+    if (!myLocationInput.value && savedOrigin) {
+      myLocationInput.value = savedOrigin;
+    }
+
+    myLocationInput.addEventListener('change', function () {
+      const value = myLocationInput.value.trim();
+      localStorage.setItem('route_origin', value);
+      document.querySelectorAll('.current-origin-input').forEach((input) => {
+        input.value = value;
+      });
+
+      if (filterForm) {
+        filterForm.submit();
+      }
+    });
+
+    document.querySelectorAll('.current-origin-input').forEach((input) => {
+      input.value = myLocationInput.value.trim();
+    });
+
+    async function fetchRouteMetrics(listingId, origin) {
+      const response = await fetch(`/api/listings/${listingId}/route-metrics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({ origin })
+      });
+
+      if (!response.ok) {
+        throw new Error('route_failed');
+      }
+
+      return response.json();
+    }
+
+    async function calculateRouteForRow(button) {
+      const origin = myLocationInput.value.trim();
+      const row = button.closest('tr[data-listing-id]');
+      const routeCell = row?.querySelector('.route-cell');
+      const listingId = row?.dataset.listingId;
+
+      if (!origin) {
+        alert('Podaj swoją lokalizację.');
+        return;
+      }
+
+      if (!<%= orsApiKeyConfigured ? 'true' : 'false' %>) {
+        alert('Brak ORS_API_KEY w konfiguracji serwera (.env).');
+        return;
+      }
+
+      localStorage.setItem('route_origin', origin);
+
+      if (!row || !routeCell || !listingId) {
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = '...';
+
+      try {
+        const route = await fetchRouteMetrics(listingId, origin);
+        routeCell.dataset.distanceValue = String(route.distanceKm || '');
+        routeCell.dataset.durationValue = String(route.durationMin || '');
+        row.dataset.routeOrigin = origin;
+        routeCell.firstElementChild.textContent = `${route.distanceKm} km / ${route.durationMin} min${route.cached ? ' (cache)' : ''}`;
+        button.remove();
+      } catch {
+        routeCell.firstElementChild.textContent = 'brak trasy';
+      } finally {
+        if (button.isConnected) {
+          button.disabled = false;
+          button.textContent = 'Przelicz';
+        }
+      }
+    }
+
+    document.querySelectorAll('.route-calc-btn').forEach((button) => {
+      button.addEventListener('click', function () {
+        calculateRouteForRow(button);
+      });
+    });
+
+    function getRowGroupPairs() {
+      return Array.from(document.querySelectorAll('tr[data-listing-id]')).map((row) => ({
+        row,
+        editRow: document.getElementById(`edit-${row.dataset.listingId}`)
+      }));
+    }
+
+    function sortRowsByRoute(direction) {
+      const tbody = document.querySelector('table tbody');
+      const pairs = getRowGroupPairs();
+
+      pairs.sort((a, b) => {
+        const aCell = a.row.querySelector('.route-cell');
+        const bCell = b.row.querySelector('.route-cell');
+        const aValue = Number(aCell?.dataset.distanceValue || Number.POSITIVE_INFINITY);
+        const bValue = Number(bCell?.dataset.distanceValue || Number.POSITIVE_INFINITY);
+
+        if (aValue === bValue) {
+          return Number(a.row.dataset.listingId) - Number(b.row.dataset.listingId);
+        }
+
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+      });
+
+      for (const pair of pairs) {
+        tbody.appendChild(pair.row);
+        if (pair.editRow) {
+          tbody.appendChild(pair.editRow);
+        }
+      }
+    }
+
+    sortByRouteButton.addEventListener('click', function () {
+      const nextDir = sortByRouteButton.dataset.dir === 'asc' ? 'desc' : 'asc';
+      sortByRouteButton.dataset.dir = nextDir;
+      routeSortIndicator.textContent = nextDir === 'asc' ? '↑' : '↓';
+      sortRowsByRoute(nextDir);
+    });
+
+    function extractListingAction(action) {
+      const match = String(action || '').match(/\/listings\/(\d+)\/(rating|flag|reject|delete)$/);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        id: Number(match[1]),
+        type: match[2]
+      };
+    }
+
+    async function submitListingAction(form) {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new URLSearchParams(new FormData(form)).toString()
+      });
+
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'request_failed');
+      }
+
+      return payload || {};
+    }
+
+    function applyRatingState(row, field, value) {
+      row.querySelectorAll('form[action$="/rating"]').forEach((ratingForm) => {
+        const fieldInput = ratingForm.querySelector('input[name="field"]');
+        const valueInput = ratingForm.querySelector('input[name="value"]');
+        const button = ratingForm.querySelector('.star-btn');
+
+        if (!fieldInput || !valueInput || !button || fieldInput.value !== field) {
+          return;
+        }
+
+        const starValue = Number(valueInput.value);
+        button.classList.toggle('active', starValue <= Number(value));
+      });
+    }
+
+    function applyFlagState(form, value) {
+      const button = form.querySelector('.icon-btn');
+      const valueInput = form.querySelector('input[name="value"]');
+      if (button) {
+        button.classList.toggle('active', Number(value) === 1);
+      }
+      if (valueInput) {
+        valueInput.value = Number(value) === 1 ? '0' : '1';
+      }
+    }
+
+    function applyRejectedState(row) {
+      const dot = row.querySelector('.status-dot');
+      if (dot) {
+        dot.className = 'status-dot status-odrzucone';
+        dot.title = 'Odrzucone';
+      }
+
+      const statusIcons = row.querySelector('.status-icons');
+      if (statusIcons && !statusIcons.querySelector('.status-mark')) {
+        const mark = document.createElement('span');
+        mark.className = 'status-mark';
+        mark.title = 'Odrzucone';
+        mark.textContent = '✖';
+        statusIcons.appendChild(mark);
+      }
+    }
+
+    function wireAsyncListingActions() {
+      document.querySelectorAll('form.inline-form[method="post"]').forEach((form) => {
+        const parsed = extractListingAction(form.action);
+        if (!parsed) {
+          return;
+        }
+
+        form.classList.add('js-async-action');
+
+        form.addEventListener('submit', async function (event) {
+          event.preventDefault();
+
+          const row = form.closest('tr[data-listing-id]');
+          if (!row) {
+            form.submit();
+            return;
+          }
+
+          const submitButton = form.querySelector('button[type="submit"]');
+          if (submitButton) {
+            submitButton.disabled = true;
+          }
+
+          try {
+            const result = await submitListingAction(form);
+
+            if (parsed.type === 'rating') {
+              applyRatingState(row, result.field, result.value);
+            } else if (parsed.type === 'flag') {
+              applyFlagState(form, result.value);
+            } else if (parsed.type === 'reject') {
+              applyRejectedState(row);
+            } else if (parsed.type === 'delete') {
+              const editRow = document.getElementById(`edit-${parsed.id}`);
+              row.remove();
+              if (editRow) {
+                editRow.remove();
+              }
+            }
+          } catch {
+            alert('Nie udało się zapisać zmiany.');
+          } finally {
+            if (submitButton && submitButton.isConnected) {
+              submitButton.disabled = false;
+            }
+          }
+        });
+      });
+    }
+
+    wireAsyncListingActions();
+
+    async function checkDuplicateUrl(sourceUrl) {
+      const response = await fetch('/api/listings/check-url?source_url=' + encodeURIComponent(sourceUrl), {
+        headers: { Accept: 'application/json' }
+      });
+
+      if (!response.ok) {
+        return { exists: false };
+      }
+
+      return response.json();
+    }
+
+    document.querySelectorAll('.duplicate-check-form').forEach((form) => {
+      form.addEventListener('submit', async function (event) {
+        const urlInput = form.querySelector('input[name="source_url"]');
+        const duplicateInput = form.querySelector('input[name="confirm_duplicate"]');
+        const sourceUrl = (urlInput?.value || '').trim();
+
+        if (!sourceUrl || duplicateInput?.value === '1') {
+          return;
+        }
+
+        event.preventDefault();
+
+        try {
+          const result = await checkDuplicateUrl(sourceUrl);
+
+          if (!result.exists) {
+            duplicateInput.value = '0';
+            form.submit();
+            return;
+          }
+
+          const existingId = result.listing?.id ? `ID: ${result.listing.id}` : 'istniejące ogłoszenie';
+          const confirmed = window.confirm(
+            `To ogłoszenie już jest zapisane (${existingId}). Czy na pewno chcesz dodać je ponownie?`
+          );
+
+          if (!confirmed) {
+            return;
+          }
+
+          duplicateInput.value = '1';
+          form.submit();
+        } catch {
+          form.submit();
+        }
+      });
+    });
+
+    document.querySelectorAll('form[method="post"]').forEach((form) => {
+      form.addEventListener('submit', function () {
+        if (form.classList.contains('js-async-action')) {
+          return;
+        }
+        sessionStorage.setItem(SCROLL_RESTORE_KEY, String(window.scrollY || window.pageYOffset || 0));
+      });
+    });
+  </script>
+</body>
+</html>
