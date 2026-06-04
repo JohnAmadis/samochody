@@ -545,6 +545,45 @@ app.get('/compare', async (req, res) => {
   }
 });
 
+app.get('/print', async (req, res) => {
+  try {
+    const idsRaw = req.query.ids;
+    if (!idsRaw) {
+      return res.redirect('/?error=Nie%20wybrano%20og%C5%82osze%C5%84%20do%20wydruku');
+    }
+
+    const ids = String(idsRaw)
+      .split(',')
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+      .slice(0, 20);
+
+    if (!ids.length) {
+      return res.redirect('/?error=Nieprawid%C5%82owe%20ID%20do%20wydruku');
+    }
+
+    const pool = getPool();
+    const placeholders = ids.map(() => '?').join(',');
+    const [listings] = await pool.query(
+      `SELECT * FROM listings WHERE id IN (${placeholders}) ORDER BY FIELD(id, ${placeholders})`,
+      [...ids, ...ids]
+    );
+
+    for (const listing of listings) {
+      const [images] = await pool.query(
+        'SELECT original_url, local_path FROM listing_images WHERE listing_id = ? ORDER BY sort_order ASC LIMIT 3',
+        [listing.id]
+      );
+      listing.images = images;
+      listing.mainImage = images[0] || null;
+    }
+
+    res.render('print', { listings });
+  } catch (error) {
+    res.status(500).send(`Błąd wydruku: ${error.message}`);
+  }
+});
+
 app.get('/api/listings/check-url', async (req, res) => {
   const sourceUrl = normalizeUrl(req.query.source_url);
   if (!sourceUrl) {

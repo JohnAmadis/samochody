@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wydruk ofert samochodów</title>
+  <style>
+    /* ── Zmienne i reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --border: #d0d7e8;
+      --muted:  #6b7694;
+      --text:   #1a2540;
+      --label:  #5f6b80;
+      --star-on:  #f6a623;
+      --star-off: #d0d7e8;
+      --flag-on:  #116e48;
+    }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 9.5pt;
+      color: var(--text);
+      background: #f4f7fc;
+      padding: 1rem 1.5rem;
+    }
+
+    /* ── Pasek akcji (ukryty podczas druku) ── */
+    .print-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.1rem;
+      padding: 0.6rem 0.9rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .print-toolbar h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.4rem 0.85rem;
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      background: #fff;
+      color: var(--text);
+      transition: background 0.15s;
+    }
+
+    .btn-primary {
+      background: #2066f5;
+      color: #fff;
+      border-color: #2066f5;
+    }
+
+    .btn-primary:hover { background: #1751cc; }
+    .btn:hover { background: #f0f5ff; }
+
+    /* ── Karta oferty ── */
+    .car-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 0.9rem;
+      padding: 0.75rem 0.85rem;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Nagłówek karty ── */
+    .car-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.55rem;
+      border-bottom: 1.5px solid #e8edf8;
+      padding-bottom: 0.45rem;
+    }
+
+    .car-header-text { flex: 1; }
+
+    .car-title {
+      font-size: 11pt;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .car-links {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.3rem;
+      flex-wrap: wrap;
+    }
+
+    .car-link {
+      font-size: 7.5pt;
+      color: #2066f5;
+      word-break: break-all;
+    }
+
+    .car-link-label {
+      font-size: 7.5pt;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-right: 0.2rem;
+    }
+
+    /* ── Główna zawartość (zdjęcie + parametry) ── */
+    .car-body {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 0.7rem;
+      align-items: start;
+    }
+
+    /* Jeśli brak zdjęcia */
+    .car-body.no-image {
+      grid-template-columns: 1fr;
+    }
+
+    .car-photos {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .car-photo {
+      width: 130px;
+      height: 86px;
+      object-fit: cover;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    /* ── Parametry techniczne ── */
+    .car-specs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.35rem 0.55rem;
+    }
+
+    .spec-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .spec-label {
+      font-size: 6.5pt;
+      font-weight: 700;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+    }
+
+    .spec-value {
+      font-size: 9pt;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .spec-value.price {
+      font-size: 10.5pt;
+      font-weight: 800;
+      color: #116e48;
+    }
+
+    /* ── Sekcja dolna: oceny + komentarze ── */
+    .car-footer {
+      margin-top: 0.55rem;
+      padding-top: 0.45rem;
+      border-top: 1px solid #edf1f8;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.5rem 0.85rem;
+      align-items: start;
+    }
+
+    .ratings-flags {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      min-width: 100px;
+    }
+
+    .rating-row {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .rating-row-label {
+      font-size: 7pt;
+      font-weight: 700;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      min-width: 60px;
+    }
+
+    .stars-print {
+      display: flex;
+      gap: 1px;
+    }
+
+    .star { font-size: 9pt; line-height: 1; }
+    .star.on  { color: var(--star-on); }
+    .star.off { color: var(--star-off); }
+
+    .flags-row {
+      display: flex;
+      gap: 0.35rem;
+      margin-top: 0.2rem;
+      flex-wrap: wrap;
+    }
+
+    .flag-badge {
+      font-size: 7pt;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: #f8faff;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .flag-badge.active {
+      background: #e9fff5;
+      border-color: #b6efd4;
+      color: var(--flag-on);
+      font-weight: 700;
+    }
+
+    /* ── Komentarze ── */
+    .car-comments {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .comment-block { }
+
+    .comment-label {
+      font-size: 6.5pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--label);
+    }
+
+    .comment-text {
+      font-size: 8pt;
+      color: var(--text);
+      white-space: pre-wrap;
+      line-height: 1.4;
+    }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-block;
+      font-size: 7pt;
+      font-weight: 700;
+      padding: 0.1rem 0.45rem;
+      border-radius: 999px;
+      background: #f0f5ff;
+      color: var(--text);
+      border: 1px solid var(--border);
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+
+    /* ── Numeracja (opjonalna) ── */
+    .car-index {
+      font-size: 7pt;
+      font-weight: 700;
+      color: var(--muted);
+      text-align: right;
+      min-width: 30px;
+    }
+
+    /* ── Paginacja na wydruku ── */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 10mm 12mm;
+      }
+
+      html, body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .print-toolbar {
+        display: none !important;
+      }
+
+      .car-card {
+        border: 1pt solid #c8d0e0;
+        border-radius: 0;
+        margin-bottom: 5mm;
+        padding: 4mm 5mm;
+        box-shadow: none;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .car-title { font-size: 10.5pt; }
+      .spec-value.price { font-size: 10pt; }
+
+      a { color: inherit; text-decoration: none; }
+
+      .flag-badge.active {
+        background: #e9fff5;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .star.on {
+        color: var(--star-on);
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Pasek akcji (widoczny tylko w przeglądarce, ukryty na wydruku) -->
+  <div class="print-toolbar">
+    <h1>🖨 Wydruk ofert samochodów (<%= listings.length %>)</h1>
+    <a href="javascript:history.back()" class="btn">← Wróć</a>
+    <button class="btn btn-primary" onclick="window.print()">Drukuj (A4)</button>
+  </div>
+
+  <% if (!listings.length) { %>
+    <p style="color:#8f1f25;padding:1rem;">Brak danych do wydruku.</p>
+  <% } %>
+
+  <% listings.forEach(function(listing, index) {
+    function stars(val) {
+      val = Number(val) || 0;
+      let s = '';
+      for (let i = 1; i <= 5; i++) {
+        s += `<span class="star ${i <= val ? 'on' : 'off'}">${i <= val ? '★' : '☆'}</span>`;
+      }
+      return s;
+    }
+
+    const hasImage = listing.images && listing.images.length;
+    const hasSourceUrl = /^https?:\/\//i.test(listing.source_url || '');
+    const hasReportUrl = /^https?:\/\//i.test(listing.report_url || '');
+  %>
+  <div class="car-card">
+
+    <!-- Nagłówek -->
+    <div class="car-header">
+      <div class="car-header-text">
+        <div class="car-title">
+          <%= index + 1 %>. <%= listing.title || 'Bez tytułu' %>
+          <% if (listing.status) { %>
+            <span class="status-badge"><%= listing.status %></span>
+          <% } %>
+        </div>
+        <div class="car-links">
+          <% if (hasSourceUrl) { %>
+            <span class="car-link-label">Ogłoszenie:</span>
+            <span class="car-link"><%= listing.source_url %></span>
+          <% } %>
+          <% if (hasReportUrl) { %>
+            &nbsp;
+            <span class="car-link-label">Raport:</span>
+            <span class="car-link"><%= listing.report_url %></span>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zdjęcie + parametry -->
+    <div class="car-body <%= hasImage ? '' : 'no-image' %>">
+
+      <% if (hasImage) { %>
+      <div class="car-photos">
+        <% listing.images.slice(0, 2).forEach(function(img) { %>
+          <img class="car-photo" src="<%= img.local_path || img.original_url %>" alt="Zdjęcie auta" />
+        <% }) %>
+      </div>
+      <% } %>
+
+      <div class="car-specs">
+        <div class="spec-item">
+          <span class="spec-label">Cena</span>
+          <span class="spec-value price"><%= listing.price ? Number(listing.price).toLocaleString('pl-PL') + '\u00a0' + (listing.currency || 'PLN') : '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Rok produkcji</span>
+          <span class="spec-value"><%= listing.production_year || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Rok sprowadzenia</span>
+          <span class="spec-value"><%= listing.import_year || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Przebieg</span>
+          <span class="spec-value"><%= listing.mileage ? Number(listing.mileage).toLocaleString('pl-PL') + '\u00a0km' : '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Paliwo</span>
+          <span class="spec-value"><%= listing.fuel_type || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Skrzynia</span>
+          <span class="spec-value"><%= listing.gearbox || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Pojemność</span>
+          <span class="spec-value"><%= listing.engine_capacity || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Moc</span>
+          <span class="spec-value"><%= listing.power_hp ? listing.power_hp + '\u00a0KM' : '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Typ nadwozia</span>
+          <span class="spec-value"><%= listing.body_type || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Napęd</span>
+          <span class="spec-value"><%= listing.drive_type || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Kolor</span>
+          <span class="spec-value"><%= listing.color || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Lokalizacja</span>
+          <span class="spec-value"><%= listing.location || '—' %></span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Telefon</span>
+          <span class="spec-value"><%= listing.phone || '—' %></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Oceny, flagi i komentarze -->
+    <div class="car-footer">
+      <div class="ratings-flags">
+        <div class="rating-row">
+          <span class="rating-row-label">Ocena</span>
+          <div class="stars-print"><%- stars(listing.personal_rating) %></div>
+        </div>
+        <div class="rating-row">
+          <span class="rating-row-label">Historia</span>
+          <div class="stars-print"><%- stars(listing.history_rating) %></div>
+        </div>
+        <div class="rating-row">
+          <span class="rating-row-label">Ocena AI</span>
+          <div class="stars-print"><%- stars(listing.ai_rating) %></div>
+        </div>
+        <div class="flags-row">
+          <span class="flag-badge <%= listing.reviewed_detailed ? 'active' : '' %>">👁 Przejrzane</span>
+          <span class="flag-badge <%= listing.contacted ? 'active' : '' %>">☎ Kontakt</span>
+          <span class="flag-badge <%= listing.checked_offer ? 'active' : '' %>">✓ Sprawdzone</span>
+          <span class="flag-badge <%= listing.to_view_live ? 'active' : '' %>">🚗 Do obejrzenia</span>
+        </div>
+      </div>
+
+      <div class="car-comments">
+        <% if (listing.personal_comment) { %>
+          <div class="comment-block">
+            <div class="comment-label">Komentarz osobisty</div>
+            <div class="comment-text"><%= listing.personal_comment %></div>
+          </div>
+        <% } %>
+        <% if (listing.ai_comment) { %>
+          <div class="comment-block">
+            <div class="comment-label">Komentarz AI</div>
+            <div class="comment-text"><%= listing.ai_comment %></div>
+          </div>
+        <% } %>
+        <% if (listing.history_note) { %>
+          <div class="comment-block">
+            <div class="comment-label">Historia pojazdu</div>
+            <div class="comment-text"><%= listing.history_note %></div>
+          </div>
+        <% } %>
+        <% if (!listing.personal_comment && !listing.ai_comment && !listing.history_note) { %>
+          <span style="color:var(--muted);font-size:8pt;">Brak komentarzy</span>
+        <% } %>
+      </div>
+    </div>
+
+  </div>
+  <% }) %>
+
+  <script>
+    // Automatycznie otwórz okno dialogowe drukowania po załadowaniu strony
+    window.addEventListener('load', function () {
+      window.print();
+    });
+  </script>
+</body>
+</html>

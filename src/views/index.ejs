@@ -139,7 +139,10 @@
         <input type="text" id="myLocation" name="origin" value="<%= origin || '' %>" placeholder="Twoja lokalizacja (np. Banino, Polska)" />
         <button class="btn btn-small" type="submit">Szukaj</button>
       </form>
-      <button class="btn btn-dark" id="compareSelected">Porównaj zaznaczone</button>
+      <div class="toolbar-selection-actions">
+        <button class="btn btn-dark" id="compareSelected">Porównaj zaznaczone</button>
+        <button class="btn btn-print" id="printSelected">🖨 Wydrukuj zaznaczone</button>
+      </div>
     </section>
 
     <section class="table-wrap">
@@ -569,6 +572,15 @@
         return;
       }
       window.location.href = '/compare?ids=' + ids.join(',');
+    });
+
+    document.getElementById('printSelected').addEventListener('click', function () {
+      const ids = Array.from(document.querySelectorAll('.compare-check:checked')).map((el) => el.value);
+      if (!ids.length) {
+        alert('Zaznacz co najmniej 1 ogłoszenie do wydruku');
+        return;
+      }
+      window.open('/print?ids=' + ids.join(','), '_blank');
     });
 
     document.querySelectorAll('.edit-toggle').forEach((btn) => {

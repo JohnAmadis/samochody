@@ -88,6 +88,23 @@ body {
   border-color: #1f2d4d;
 }
 
+.btn-print {
+  background: #fff8e8;
+  color: #7a4d00;
+  border-color: #f5d48a;
+}
+
+.btn-print:hover {
+  background: #ffedbc;
+  border-color: #f6a623;
+}
+
+.toolbar-selection-actions {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
 .btn-small {
   padding: 0.35rem 0.65rem;
   border-radius: 8px;
