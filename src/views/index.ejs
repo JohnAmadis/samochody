@@ -232,7 +232,20 @@
               </td>
               <td>
                 <div class="cell-title"><%= listing.title || 'Bez tytułu' %></div>
-                <a href="<%= listing.source_url %>" target="_blank" rel="noopener noreferrer" class="source-link">Źródło</a>
+                <div class="listing-links">
+                  <% const hasSourceUrl = /^https?:\/\//i.test(listing.source_url || ''); %>
+                  <% if (hasSourceUrl) { %>
+                    <a href="<%= listing.source_url %>" target="_blank" rel="noopener noreferrer" class="btn btn-small listing-action-btn">Źródło</a>
+                  <% } else { %>
+                    <span class="btn btn-small listing-action-btn listing-action-btn-disabled" aria-disabled="true">Źródło</span>
+                  <% } %>
+
+                  <% if (listing.report_url) { %>
+                    <a href="<%= listing.report_url %>" target="_blank" rel="noopener noreferrer" class="btn btn-small listing-action-btn listing-action-btn-report">Raport</a>
+                  <% } else { %>
+                    <span class="btn btn-small listing-action-btn listing-action-btn-disabled" aria-disabled="true">Raport</span>
+                  <% } %>
+                </div>
                 <% if (listing.images && listing.images.length) { %>
                   <img src="<%= listing.images[0].local_path || listing.images[0].original_url %>" alt="Zdjęcie auta" class="thumb" />
                 <% } %>
@@ -356,6 +369,7 @@
                   <label>Ocena historii (1-5)<input type="number" min="1" max="5" name="history_rating" value="<%= listing.history_rating || '' %>" /></label>
                   <label>Ocena AI (1-5)<input type="number" min="1" max="5" name="ai_rating" value="<%= listing.ai_rating || '' %>" /></label>
                   <label>Telefon<input type="text" name="phone" value="<%= listing.phone || '' %>" /></label>
+                  <label>Raport (URL CarVertical)<input type="url" name="report_url" value="<%= listing.report_url || '' %>" placeholder="https://www.carvertical.com/..." /></label>
                   <label>Komentarz osobisty<textarea name="personal_comment"><%= listing.personal_comment || '' %></textarea></label>
                   <label>Komentarz AI<textarea name="ai_comment"><%= listing.ai_comment || '' %></textarea></label>
                   <label>Historia pojazdu<textarea name="history_note"><%= listing.history_note || '' %></textarea></label>

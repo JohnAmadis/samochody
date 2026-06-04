@@ -811,6 +811,7 @@ app.post('/import', async (req, res) => {
 app.post('/listings', async (req, res) => {
   try {
     const sourceUrl = normalizeUrl(req.body.source_url);
+    const reportUrl = normalizeUrl(req.body.report_url);
     const currentOrigin = String(req.body.current_origin || '').trim();
     const originQuery = currentOrigin ? `&origin=${encodeURIComponent(currentOrigin)}` : '';
     const duplicateConfirmed = isDuplicateConfirmed(req.body.confirm_duplicate);
@@ -828,13 +829,14 @@ app.post('/listings', async (req, res) => {
 
     const [insertResult] = await pool.query(
       `INSERT INTO listings (
-        source, source_url, title, price, currency, mileage, description, location, phone,
+        source, source_url, report_url, title, price, currency, mileage, description, location, phone,
         production_year, import_year, history_rating, personal_rating, status, history_note,
         personal_comment, ai_rating, ai_comment, fuel_type, gearbox, engine_capacity, power_hp, body_type, drive_type, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         req.body.source || 'manual',
         sourceUrl || `manual://${Date.now()}`,
+        reportUrl || null,
         req.body.title || null,
         toDecimalOrNull(req.body.price),
         req.body.currency || 'PLN',
@@ -888,6 +890,7 @@ app.post('/listings/:id/update', async (req, res) => {
         history_note = ?,
         ai_rating = ?,
         ai_comment = ?,
+        report_url = ?,
         phone = ?,
         import_year = ?,
         updated_at = CURRENT_TIMESTAMP
@@ -900,6 +903,7 @@ app.post('/listings/:id/update', async (req, res) => {
         req.body.history_note || null,
         toIntOrNull(req.body.ai_rating),
         req.body.ai_comment || null,
+        normalizeUrl(req.body.report_url) || null,
         req.body.phone || null,
         toIntOrNull(req.body.import_year),
         id

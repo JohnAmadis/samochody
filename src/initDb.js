@@ -69,6 +69,7 @@ async function ensureSourceUrlIsNotUnique() {
 }
 
 async function runMigrations() {
+  await ensureListingColumn('report_url', 'VARCHAR(700) NULL AFTER source_url');
   await ensureListingColumn('reviewed_detailed', 'BOOLEAN NOT NULL DEFAULT FALSE AFTER status');
   await ensureListingColumn('contacted', 'BOOLEAN NOT NULL DEFAULT FALSE AFTER reviewed_detailed');
   await ensureListingColumn('checked_offer', 'BOOLEAN NOT NULL DEFAULT FALSE AFTER contacted');
