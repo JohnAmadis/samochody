@@ -13,6 +13,15 @@ const DEFAULT_ORS_API_KEY = process.env.ORS_API_KEY || '';
 const ROUTE_CACHE_VERSION = 3;
 
 const STATUS_OPTIONS = ['Nowe', 'Do kontaktu', 'W trakcie', 'Do sprawdzenia', 'Odrzucone', 'Nieaktualne'];
+const DEFAULT_STATUS_FILTERS = STATUS_OPTIONS.filter((s) => s !== 'Odrzucone');
+
+const PROGRESS_FIELDS = ['reviewed_detailed', 'contacted', 'checked_offer', 'to_view_live'];
+const PROGRESS_OPTIONS = [
+  { field: 'reviewed_detailed', label: 'Przejrzane dokładnie', icon: '👁' },
+  { field: 'contacted',         label: 'Kontakt wykonany',      icon: '☎' },
+  { field: 'checked_offer',     label: 'Ogłoszenie sprawdzone', icon: '✓' },
+  { field: 'to_view_live',      label: 'Do obejrzenia na żywo', icon: '🚗' },
+];
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -354,13 +363,19 @@ function normalizeStatusFilters(rawStatus) {
   const filtered = statuses.filter((status) => STATUS_OPTIONS.includes(status));
 
   if (!filtered.length) {
-    return [...STATUS_OPTIONS];
+    return [...DEFAULT_STATUS_FILTERS];
   }
 
   return [...new Set(filtered)];
 }
 
-async function listListings(statusFilters = STATUS_OPTIONS, searchQuery = '', sortBy = 'created_at', sortDir = 'desc', origin = '') {
+function normalizeProgressFilters(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr.filter((f) => PROGRESS_FIELDS.includes(f));
+}
+
+async function listListings(statusFilters = STATUS_OPTIONS, searchQuery = '', sortBy = 'created_at', sortDir = 'desc', origin = '', progressInclude = [], progressExclude = []) {
   const pool = getPool();
   let query = 'SELECT * FROM listings';
   const params = [];
@@ -387,6 +402,13 @@ async function listListings(statusFilters = STATUS_OPTIONS, searchQuery = '', so
   if (Array.isArray(statusFilters) && statusFilters.length > 0 && statusFilters.length < STATUS_OPTIONS.length) {
     whereClauses.push(`status IN (${statusFilters.map(() => '?').join(',')})`);
     params.push(...statusFilters);
+  }
+
+  for (const field of (progressInclude || [])) {
+    if (PROGRESS_FIELDS.includes(field)) whereClauses.push(`${field} = 1`);
+  }
+  for (const field of (progressExclude || [])) {
+    if (PROGRESS_FIELDS.includes(field)) whereClauses.push(`${field} = 0`);
   }
 
   if (normalizedSearch) {
@@ -457,14 +479,19 @@ async function listListings(statusFilters = STATUS_OPTIONS, searchQuery = '', so
 app.get('/', async (req, res) => {
   try {
     const selectedStatuses = normalizeStatusFilters(req.query.status);
+    const progressInclude = normalizeProgressFilters(req.query.progress_include);
+    const progressExclude = normalizeProgressFilters(req.query.progress_exclude);
     const q = String(req.query.q || '').trim();
     const origin = String(req.query.origin || '').trim();
     const sortBy = String(req.query.sort_by || 'created_at');
     const sortDir = String(req.query.sort_dir || 'desc');
-    const listings = await listListings(selectedStatuses, q, sortBy, sortDir, origin);
+    const listings = await listListings(selectedStatuses, q, sortBy, sortDir, origin, progressInclude, progressExclude);
     res.render('index', {
       listings,
       selectedStatuses,
+      progressInclude,
+      progressExclude,
+      progressOptions: PROGRESS_OPTIONS,
       q,
       origin,
       sortBy,

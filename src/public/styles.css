@@ -151,6 +151,144 @@ body {
   min-width: 260px;
 }
 
+/* ── Status dropdown ─────────────────────────────────────────────────────── */
+.status-dropdown {
+  position: relative;
+}
+
+.status-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text);
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.status-dropdown-btn:hover,
+.status-dropdown.is-open .status-dropdown-btn {
+  border-color: var(--primary);
+  background: #f0f5ff;
+}
+
+.status-dropdown-arrow {
+  font-size: 0.7rem;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+
+.status-dropdown.is-open .status-dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.status-dropdown-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 200;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(32, 52, 110, 0.12);
+  padding: 0.5rem 0.25rem;
+  min-width: 180px;
+}
+
+.status-dropdown-panel.open {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: background 0.1s;
+}
+
+.status-filter-item:hover {
+  background: #f0f5ff;
+}
+
+.status-filter-item input[type='checkbox'] {
+  accent-color: var(--primary);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Progress filter dropdown ──────────────────────────────────────────────── */
+.prog-col-headers {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.2rem 0.75rem 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.prog-col-inc { color: var(--success); }
+.prog-col-exc { color: var(--danger); }
+
+.progress-filter-item {
+  display: grid;
+  grid-template-columns: 18px 1fr 18px;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  transition: background 0.1s;
+}
+
+.progress-filter-item:hover {
+  background: #f0f5ff;
+}
+
+.prog-check {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.prog-include { accent-color: var(--success); }
+.prog-exclude { accent-color: var(--danger); }
+
+.progress-item-label {
+  font-size: 0.875rem;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+/* State styles via :has() */
+.progress-filter-item:has(.prog-include:checked) .progress-item-label {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.progress-filter-item:has(.prog-exclude:checked) .progress-item-label {
+  color: var(--danger);
+  text-decoration: line-through;
+  font-weight: 600;
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 .route-tools {
   display: flex;
   gap: 0.45rem;

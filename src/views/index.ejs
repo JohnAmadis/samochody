@@ -41,6 +41,8 @@
       function buildSortHref(column) {
         const params = new URLSearchParams();
         (selectedStatuses || []).forEach((statusValue) => params.append('status', statusValue));
+        (progressInclude || []).forEach((f) => params.append('progress_include', f));
+        (progressExclude || []).forEach((f) => params.append('progress_exclude', f));
         if (q) params.set('q', q);
         if (origin) params.set('origin', origin);
         params.set('sort_by', column);
@@ -51,15 +53,82 @@
 
     <section class="toolbar">
       <form method="get" action="/" class="filter-form">
-        <fieldset class="status-filter-group">
-          <legend>Pokaż statusy:</legend>
-          <% statusOptions.forEach(function(opt) { %>
-            <label class="status-filter-item">
-              <input type="checkbox" name="status" value="<%= opt %>" <%= selectedStatusSet.has(opt) ? 'checked' : '' %> />
-              <span><%= opt %></span>
-            </label>
-          <% }) %>
-        </fieldset>
+        <%
+          const selectedList = statusOptions.filter(o => selectedStatusSet.has(o));
+          let statusLabel;
+          if (selectedList.length === 0) {
+            statusLabel = 'Żaden status';
+          } else if (selectedList.length === statusOptions.length) {
+            statusLabel = 'Wszystkie statusy';
+          } else if (selectedList.length <= 2) {
+            statusLabel = selectedList.join(', ');
+          } else {
+            statusLabel = selectedList.slice(0, 2).join(', ') + ' (+' + (selectedList.length - 2) + ')';
+          }
+        %>
+        <div class="status-dropdown" id="statusDropdown">
+          <button type="button" class="status-dropdown-btn" id="statusDropdownBtn" aria-expanded="false" aria-haspopup="listbox">
+            <span class="status-dropdown-label"><%= statusLabel %></span>
+            <span class="status-dropdown-arrow">▾</span>
+          </button>
+          <div class="status-dropdown-panel" id="statusDropdownPanel" role="listbox">
+            <% statusOptions.forEach(function(opt) { %>
+              <label class="status-filter-item">
+                <input type="checkbox" name="status" value="<%= opt %>" <%= selectedStatusSet.has(opt) ? 'checked' : '' %> />
+                <span><%= opt %></span>
+              </label>
+            <% }) %>
+          </div>
+        </div>
+        <%
+          const progIncSet = new Set(progressInclude || []);
+          const progExcSet = new Set(progressExclude || []);
+          const progActiveCount = progIncSet.size + progExcSet.size;
+          let progressLabel;
+          if (progActiveCount === 0) {
+            progressLabel = 'Dowolny postęp';
+          } else {
+            const parts = [];
+            if (progIncSet.size > 0) parts.push(progIncSet.size + ' włącz.');
+            if (progExcSet.size > 0) parts.push(progExcSet.size + ' wyklucz.');
+            progressLabel = 'Postęp: ' + parts.join(', ');
+          }
+        %>
+        <div class="status-dropdown" id="progressDropdown">
+          <button type="button" class="status-dropdown-btn" id="progressDropdownBtn" aria-expanded="false" aria-haspopup="listbox">
+            <span class="status-dropdown-label" id="progressDropdownLabel"><%= progressLabel %></span>
+            <span class="status-dropdown-arrow">▾</span>
+          </button>
+          <div class="status-dropdown-panel" id="progressDropdownPanel" role="listbox">
+            <div class="prog-col-headers">
+              <span class="prog-col-inc">Włącz</span>
+              <span class="prog-col-exc">Wyklucz</span>
+            </div>
+            <% progressOptions.forEach(function(opt) { %>
+              <div class="progress-filter-item" data-field="<%= opt.field %>">
+                <input
+                  class="prog-check prog-include"
+                  type="checkbox"
+                  name="progress_include"
+                  value="<%= opt.field %>"
+                  id="pi_<%= opt.field %>"
+                  <%= progIncSet.has(opt.field) ? 'checked' : '' %>
+                />
+                <label class="progress-item-label" for="pi_<%= opt.field %>">
+                  <span class="prog-icon"><%= opt.icon %></span> <%= opt.label %>
+                </label>
+                <input
+                  class="prog-check prog-exclude"
+                  type="checkbox"
+                  name="progress_exclude"
+                  value="<%= opt.field %>"
+                  id="pe_<%= opt.field %>"
+                  <%= progExcSet.has(opt.field) ? 'checked' : '' %>
+                />
+              </div>
+            <% }) %>
+          </div>
+        </div>
         <input
           type="search"
           name="q"
@@ -363,6 +432,87 @@
 
   <script>
     const SCROLL_RESTORE_KEY = 'index_scroll_restore_y';
+
+    // ── Status dropdown ──────────────────────────────────────────────────────
+    (function initStatusDropdown() {
+      const btn = document.getElementById('statusDropdownBtn');
+      const panel = document.getElementById('statusDropdownPanel');
+      const dropdown = document.getElementById('statusDropdown');
+      if (!btn || !panel) return;
+
+      function openDropdown() {
+        panel.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+        dropdown.classList.add('is-open');
+      }
+
+      function closeDropdown() {
+        panel.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        dropdown.classList.remove('is-open');
+      }
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        panel.classList.contains('open') ? closeDropdown() : openDropdown();
+      });
+
+      document.addEventListener('click', function (e) {
+        if (!dropdown.contains(e.target)) closeDropdown();
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeDropdown();
+      });
+    })();
+    // ────────────────────────────────────────────────────────────────────────
+
+    // ── Progress dropdown ────────────────────────────────────────────────────
+    (function initProgressDropdown() {
+      const btn    = document.getElementById('progressDropdownBtn');
+      const panel  = document.getElementById('progressDropdownPanel');
+      const dropdown = document.getElementById('progressDropdown');
+      const label  = document.getElementById('progressDropdownLabel');
+      if (!btn || !panel) return;
+
+      function openDropdown()  { panel.classList.add('open'); btn.setAttribute('aria-expanded','true');  dropdown.classList.add('is-open'); }
+      function closeDropdown() { panel.classList.remove('open'); btn.setAttribute('aria-expanded','false'); dropdown.classList.remove('is-open'); }
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        panel.classList.contains('open') ? closeDropdown() : openDropdown();
+      });
+      document.addEventListener('click', function (e) { if (!dropdown.contains(e.target)) closeDropdown(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDropdown(); });
+
+      // mutual exclusivity + label update
+      panel.addEventListener('change', function (e) {
+        const chk = e.target;
+        if (!chk.matches('.prog-check')) return;
+        const item = chk.closest('.progress-filter-item');
+        if (!item) return;
+        const field = item.dataset.field;
+        if (chk.checked) {
+          // uncheck the opposite
+          const opposite = chk.classList.contains('prog-include') ? 'prog-exclude' : 'prog-include';
+          const other = item.querySelector('.' + opposite);
+          if (other) other.checked = false;
+        }
+        updateProgressLabel();
+      });
+
+      function updateProgressLabel() {
+        const incChecked = panel.querySelectorAll('.prog-include:checked').length;
+        const excChecked = panel.querySelectorAll('.prog-exclude:checked').length;
+        const total = incChecked + excChecked;
+        if (total === 0) { label.textContent = 'Dowolny postęp'; return; }
+        const parts = [];
+        if (incChecked > 0) parts.push(incChecked + ' włącz.');
+        if (excChecked > 0) parts.push(excChecked + ' wyklucz.');
+        label.textContent = 'Postęp: ' + parts.join(', ');
+      }
+    })();
+    // ────────────────────────────────────────────────────────────────────────
 
     (function restoreScrollPosition() {
       const raw = sessionStorage.getItem(SCROLL_RESTORE_KEY);
