@@ -132,6 +132,30 @@ function parseNextData($) {
   }
 }
 
+function isValidLocation(value) {
+  if (!value) return false;
+  const normalized = String(value).replace(/\s+/g, ' ').trim();
+  if (!normalized) return false;
+  if (/^info(?:rmacje)?$/i.test(normalized)) return false;
+  return true;
+}
+
+function extractAutoplacLocation($) {
+  const selectors = [
+    'button.top-bar__address',
+    '.seller-location__address',
+    '.seller-location__description-city',
+    '.top-bar__bottom button'
+  ];
+
+  for (const selector of selectors) {
+    const value = $(selector).first().text().replace(/\s+/g, ' ').trim();
+    if (isValidLocation(value)) return value;
+  }
+
+  return null;
+}
+
 function detailValue(details = [], key) {
   const found = details.find((item) => item?.key === key);
   return found?.value || null;
@@ -226,6 +250,7 @@ function parseListingData(url, html) {
   const jsonLdObjects = parseJsonLd($);
   const nextData = parseNextData($);
   const otomotoData = source === 'otomoto' ? extractOtomotoData(nextData, url) : null;
+  const autoplacLocation = source === 'autoplac' ? extractAutoplacLocation($) : null;
 
   const pageText = $('body').text().replace(/\s+/g, ' ');
   const title =
@@ -246,7 +271,7 @@ function parseListingData(url, html) {
   let mileage = otomotoData?.mileage ?? null;
   let productionYear = otomotoData?.productionYear ?? null;
   let phone = otomotoData?.phone ?? null;
-  let location = otomotoData?.location ?? null;
+  let location = otomotoData?.location || autoplacLocation || null;
 
   for (const obj of jsonLdObjects) {
     if (!description && obj?.description) description = obj.description;
@@ -285,7 +310,11 @@ function parseListingData(url, html) {
   }
 
   if (!location) {
-    location = extractByRegex(pageText, /(?:lokalizacja|miejscowość|location)\s*[:\-]?\s*([A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż\- ]{2,60})/i);
+    const locationCandidate = extractByRegex(
+      pageText,
+      /(?:lokalizacja|miejscowość|location)\s*[:\-]?\s*([A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż\- ]{2,60})/i
+    );
+    location = isValidLocation(locationCandidate) ? locationCandidate : null;
   }
 
   if (!phone) {

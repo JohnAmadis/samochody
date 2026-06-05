@@ -368,6 +368,7 @@
             <tr id="edit-<%= listing.id %>" class="edit-row hidden">
               <td colspan="14">
                 <form method="post" action="/listings/<%= listing.id %>/update" class="edit-grid">
+                  <label>VIN<input type="text" name="vin" value="<%= listing.vin || '' %>" /></label>
                   <label>Ocena subiektywna (1-5)<input type="number" min="1" max="5" name="personal_rating" value="<%= listing.personal_rating || '' %>" /></label>
                   <label>Ocena historii (1-5)<input type="number" min="1" max="5" name="history_rating" value="<%= listing.history_rating || '' %>" /></label>
                   <label>Ocena AI (1-5)<input type="number" min="1" max="5" name="ai_rating" value="<%= listing.ai_rating || '' %>" /></label>
@@ -408,6 +409,7 @@
       <h2>Dodaj auto ręcznie</h2>
       <form method="post" action="/listings" class="manual-grid duplicate-check-form">
         <label>Tytuł<input type="text" name="title" /></label>
+        <label>VIN<input type="text" name="vin" placeholder="opcjonalnie" /></label>
         <label>URL źródła<input type="url" name="source_url" placeholder="opcjonalnie" /></label>
         <input type="hidden" name="confirm_duplicate" value="0" />
         <input type="hidden" name="current_origin" value="<%= origin || '' %>" class="current-origin-input" />

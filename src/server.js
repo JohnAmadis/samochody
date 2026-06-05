@@ -851,6 +851,7 @@ app.post('/listings', async (req, res) => {
   try {
     const sourceUrl = normalizeUrl(req.body.source_url);
     const reportUrl = normalizeUrl(req.body.report_url);
+    const vin = String(req.body.vin || '').trim().toUpperCase() || null;
     const currentOrigin = String(req.body.current_origin || '').trim();
     const originQuery = currentOrigin ? `&origin=${encodeURIComponent(currentOrigin)}` : '';
     const duplicateConfirmed = isDuplicateConfirmed(req.body.confirm_duplicate);
@@ -862,6 +863,14 @@ app.post('/listings', async (req, res) => {
       }
     }
 
+    if (vin) {
+      const pool = getPool();
+      const [existingVin] = await pool.query('SELECT id FROM listings WHERE vin = ? LIMIT 1', [vin]);
+      if (existingVin.length > 0 && !duplicateConfirmed) {
+        return res.redirect(`/?error=VIN%20${encodeURIComponent(vin)}%20ju%C5%BC%20istnieje%20w%20bazie.%20Potwierd%C5%BA%20duplikat%2C%20aby%20doda%C4%87%20ponownie.${originQuery}`);
+      }
+    }
+
     const pool = getPool();
 
     const status = STATUS_OPTIONS.includes(req.body.status) ? req.body.status : 'Nowe';
@@ -870,8 +879,8 @@ app.post('/listings', async (req, res) => {
       `INSERT INTO listings (
         source, source_url, report_url, title, price, currency, mileage, description, location, phone,
         production_year, import_year, history_rating, personal_rating, status, history_note,
-        personal_comment, ai_rating, ai_comment, fuel_type, gearbox, engine_capacity, power_hp, body_type, drive_type, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        personal_comment, ai_rating, ai_comment, fuel_type, gearbox, engine_capacity, power_hp, body_type, drive_type, color, vin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         req.body.source || 'manual',
         sourceUrl || `manual://${Date.now()}`,
@@ -898,7 +907,8 @@ app.post('/listings', async (req, res) => {
         toIntOrNull(req.body.power_hp),
         req.body.body_type || null,
         req.body.drive_type || null,
-        req.body.color || null
+        req.body.color || null,
+        vin
       ]
     );
 
@@ -917,9 +927,22 @@ app.post('/listings/:id/update', async (req, res) => {
   }
 
   const status = STATUS_OPTIONS.includes(req.body.status) ? req.body.status : null;
+  const vin = String(req.body.vin || '').trim().toUpperCase() || null;
 
   try {
     const pool = getPool();
+
+    // Jeśli zmienia się VIN, sprawdzić czy nowy VIN już nie istnieje
+    if (vin) {
+      const [existingVin] = await pool.query(
+        'SELECT id FROM listings WHERE vin = ? AND id != ? LIMIT 1',
+        [vin, id]
+      );
+      if (existingVin.length > 0) {
+        return res.redirect(`/?error=VIN%20${encodeURIComponent(vin)}%20ju%C5%BC%20istnieje%20w%20bazie`);
+      }
+    }
+
     await pool.query(
       `UPDATE listings SET
         status = COALESCE(?, status),
@@ -932,6 +955,7 @@ app.post('/listings/:id/update', async (req, res) => {
         report_url = ?,
         phone = ?,
         import_year = ?,
+        vin = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`,
       [
@@ -945,6 +969,7 @@ app.post('/listings/:id/update', async (req, res) => {
         normalizeUrl(req.body.report_url) || null,
         req.body.phone || null,
         toIntOrNull(req.body.import_year),
+        vin,
         id
       ]
     );

@@ -68,6 +68,16 @@ async function ensureSourceUrlIsNotUnique() {
   }
 }
 
+async function ensureUniqueVinIndex() {
+  const pool = getPool();
+  const [indexes] = await pool.query('SHOW INDEX FROM listings WHERE Key_name = ?', ['unique_vin']);
+  if (Array.isArray(indexes) && indexes.length > 0) {
+    return;
+  }
+
+  await pool.query('ALTER TABLE listings ADD UNIQUE KEY unique_vin (vin)');
+}
+
 async function runMigrations() {
   await ensureListingColumn('report_url', 'VARCHAR(700) NULL AFTER source_url');
   await ensureListingColumn('reviewed_detailed', 'BOOLEAN NOT NULL DEFAULT FALSE AFTER status');
@@ -81,8 +91,10 @@ async function runMigrations() {
   await ensureListingColumn('route_calculated_at', 'TIMESTAMP NULL AFTER route_duration_min');
   await ensureListingColumn('ai_rating', 'TINYINT NULL AFTER personal_comment');
   await ensureListingColumn('ai_comment', 'TEXT NULL AFTER ai_rating');
+  await ensureListingColumn('vin', 'VARCHAR(17) NULL AFTER color');
   await ensureRouteCacheTable();
   await ensureSourceUrlIsNotUnique();
+  await ensureUniqueVinIndex();
 }
 
 async function runSeed() {

@@ -30,13 +30,15 @@ CREATE TABLE IF NOT EXISTS listings (
   body_type VARCHAR(50) NULL,
   drive_type VARCHAR(50) NULL,
   color VARCHAR(50) NULL,
+  vin VARCHAR(17) NULL,
   route_origin VARCHAR(255) NULL,
   route_distance_km DECIMAL(8,1) NULL,
   route_duration_min INT NULL,
   route_cache_version INT NULL,
   route_calculated_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_vin (vin)
 );
 
 CREATE TABLE IF NOT EXISTS listing_images (
