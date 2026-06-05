@@ -59,6 +59,13 @@ function normalizeUrl(value) {
   return String(value || '').trim();
 }
 
+function normalizeVin(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
 function isDuplicateConfirmed(value) {
   return value === '1' || value === 1 || value === true || value === 'true';
 }
@@ -273,6 +280,25 @@ async function findLatestListingByUrl(sourceUrl) {
   return rows[0] || null;
 }
 
+async function findLatestListingByVin(vin) {
+  const normalizedVin = normalizeVin(vin);
+  if (!normalizedVin) {
+    return null;
+  }
+
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT id, title, created_at
+     FROM listings
+     WHERE vin = ?
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [normalizedVin]
+  );
+
+  return rows[0] || null;
+}
+
 async function getCachedRoute(pool, origin, destination) {
   const originKey = normalizeLocationKey(origin);
   const destinationKey = normalizeLocationKey(destination);
@@ -375,7 +401,107 @@ function normalizeProgressFilters(raw) {
   return arr.filter((f) => PROGRESS_FIELDS.includes(f));
 }
 
-async function listListings(statusFilters = STATUS_OPTIONS, searchQuery = '', sortBy = 'created_at', sortDir = 'desc', origin = '', progressInclude = [], progressExclude = []) {
+function normalizeEquipmentName(value) {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  if (normalized.length < 2 || normalized.length > 120) return null;
+  return normalized;
+}
+
+function normalizeEquipmentFilters(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const seen = new Set();
+  const result = [];
+
+  for (const item of arr) {
+    const normalized = normalizeEquipmentName(item);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+  }
+
+  return result;
+}
+
+function parseEquipmentInput(raw) {
+  if (!raw) return [];
+  const chunks = Array.isArray(raw) ? raw : [raw];
+  const values = chunks.flatMap((value) => String(value).split(/[\n,;|]/g));
+  return normalizeEquipmentFilters(values);
+}
+
+function parseListingEquipment(raw) {
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) {
+    return normalizeEquipmentFilters(raw);
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return normalizeEquipmentFilters(parsed);
+      }
+    } catch {
+      // fallback for legacy/plain text
+    }
+
+    return parseEquipmentInput(trimmed);
+  }
+
+  return [];
+}
+
+function serializeEquipment(equipmentItems) {
+  const normalized = normalizeEquipmentFilters(equipmentItems);
+  if (!normalized.length) return null;
+  return JSON.stringify(normalized);
+}
+
+function listingMatchesEquipmentFilter(listingEquipment, includeFilters = [], excludeFilters = []) {
+  const normalizedListingSet = new Set((listingEquipment || []).map((item) => String(item).toLowerCase()));
+  const includeOk = (includeFilters || []).every((item) => normalizedListingSet.has(String(item).toLowerCase()));
+  const excludeOk = (excludeFilters || []).every((item) => !normalizedListingSet.has(String(item).toLowerCase()));
+  return includeOk && excludeOk;
+}
+
+async function listEquipmentOptions() {
+  const pool = getPool();
+  const [rows] = await pool.query('SELECT equipment FROM listings WHERE equipment IS NOT NULL AND equipment != ""');
+  const seen = new Set();
+  const options = [];
+
+  for (const row of rows) {
+    const parsed = parseListingEquipment(row.equipment);
+    for (const item of parsed) {
+      const key = item.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      options.push(item);
+    }
+  }
+
+  return options.sort((a, b) => a.localeCompare(b, 'pl', { sensitivity: 'base' }));
+}
+
+async function listListings(
+  statusFilters = STATUS_OPTIONS,
+  searchQuery = '',
+  sortBy = 'created_at',
+  sortDir = 'desc',
+  origin = '',
+  progressInclude = [],
+  progressExclude = [],
+  equipmentInclude = [],
+  equipmentExclude = []
+) {
   const pool = getPool();
   let query = 'SELECT * FROM listings';
   const params = [];
@@ -423,7 +549,18 @@ async function listListings(statusFilters = STATUS_OPTIONS, searchQuery = '', so
 
   query += ` ORDER BY ${normalizedSortBy} ${normalizedSortDir}, id DESC`;
 
-  const [listings] = await pool.query(query, params);
+  const [rawListings] = await pool.query(query, params);
+
+  const listings = rawListings
+    .map((listing) => {
+      const equipmentList = parseListingEquipment(listing.equipment);
+      return {
+        ...listing,
+        equipmentList,
+        equipmentText: equipmentList.join('\n')
+      };
+    })
+    .filter((listing) => listingMatchesEquipmentFilter(listing.equipmentList, equipmentInclude, equipmentExclude));
 
   for (const listing of listings) {
     const [images] = await pool.query(
@@ -481,16 +618,24 @@ app.get('/', async (req, res) => {
     const selectedStatuses = normalizeStatusFilters(req.query.status);
     const progressInclude = normalizeProgressFilters(req.query.progress_include);
     const progressExclude = normalizeProgressFilters(req.query.progress_exclude);
+    const equipmentInclude = normalizeEquipmentFilters(req.query.equipment_include);
+    const equipmentExclude = normalizeEquipmentFilters(req.query.equipment_exclude);
     const q = String(req.query.q || '').trim();
     const origin = String(req.query.origin || '').trim();
     const sortBy = String(req.query.sort_by || 'created_at');
     const sortDir = String(req.query.sort_dir || 'desc');
-    const listings = await listListings(selectedStatuses, q, sortBy, sortDir, origin, progressInclude, progressExclude);
+    const [listings, equipmentOptions] = await Promise.all([
+      listListings(selectedStatuses, q, sortBy, sortDir, origin, progressInclude, progressExclude, equipmentInclude, equipmentExclude),
+      listEquipmentOptions()
+    ]);
     res.render('index', {
       listings,
       selectedStatuses,
       progressInclude,
       progressExclude,
+      equipmentInclude,
+      equipmentExclude,
+      equipmentOptions,
       progressOptions: PROGRESS_OPTIONS,
       q,
       origin,
@@ -592,6 +737,31 @@ app.get('/api/listings/check-url', async (req, res) => {
 
   try {
     const existing = await findLatestListingByUrl(sourceUrl);
+    if (!existing) {
+      return res.json({ exists: false });
+    }
+
+    return res.json({
+      exists: true,
+      listing: {
+        id: existing.id,
+        title: existing.title,
+        createdAt: existing.created_at
+      }
+    });
+  } catch {
+    return res.status(500).json({ exists: false, error: 'check_failed' });
+  }
+});
+
+app.get('/api/listings/check-vin', async (req, res) => {
+  const vin = normalizeVin(req.query.vin);
+  if (!vin) {
+    return res.json({ exists: false });
+  }
+
+  try {
+    const existing = await findLatestListingByVin(vin);
     if (!existing) {
       return res.json({ exists: false });
     }
@@ -753,6 +923,7 @@ app.post('/api/listings/:id/route-metrics', async (req, res) => {
 
 app.post('/import', async (req, res) => {
   const sourceUrl = normalizeUrl(req.body.source_url);
+  const vin = normalizeVin(req.body.vin) || null;
   const currentOrigin = String(req.body.current_origin || '').trim();
   const originQuery = currentOrigin ? `&origin=${encodeURIComponent(currentOrigin)}` : '';
   const duplicateConfirmed = isDuplicateConfirmed(req.body.confirm_duplicate);
@@ -762,6 +933,13 @@ app.post('/import', async (req, res) => {
   }
 
   try {
+    if (vin) {
+      const existingByVin = await findLatestListingByVin(vin);
+      if (existingByVin) {
+        return res.redirect(`/?error=VIN%20${encodeURIComponent(vin)}%20ju%C5%BC%20istnieje%20w%20bazie.${originQuery}`);
+      }
+    }
+
     const existingByInputUrl = await findLatestListingByUrl(sourceUrl);
     if (existingByInputUrl && !duplicateConfirmed) {
       return res.redirect(`/?error=To%20og%C5%82oszenie%20ju%C5%BC%20zosta%C5%82o%20dodane.%20Potwierd%C5%BA%20duplikat%2C%20aby%20doda%C4%87%20ponownie.${originQuery}`);
@@ -780,8 +958,8 @@ app.post('/import', async (req, res) => {
         source, source_url, title, price, currency, mileage, description, location, phone,
         production_year, import_year, history_rating, personal_rating, status,
         history_note, personal_comment, ai_rating, ai_comment, fuel_type, gearbox, engine_capacity, power_hp,
-        body_type, drive_type, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        body_type, drive_type, color, equipment, vin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         scraped.source,
         scraped.sourceUrl,
@@ -807,7 +985,9 @@ app.post('/import', async (req, res) => {
         scraped.powerHp,
         scraped.bodyType,
         scraped.driveType,
-        scraped.color
+        scraped.color,
+        serializeEquipment(scraped.equipment),
+        vin
       ]
     );
 
@@ -851,7 +1031,7 @@ app.post('/listings', async (req, res) => {
   try {
     const sourceUrl = normalizeUrl(req.body.source_url);
     const reportUrl = normalizeUrl(req.body.report_url);
-    const vin = String(req.body.vin || '').trim().toUpperCase() || null;
+    const vin = normalizeVin(req.body.vin) || null;
     const currentOrigin = String(req.body.current_origin || '').trim();
     const originQuery = currentOrigin ? `&origin=${encodeURIComponent(currentOrigin)}` : '';
     const duplicateConfirmed = isDuplicateConfirmed(req.body.confirm_duplicate);
@@ -879,8 +1059,8 @@ app.post('/listings', async (req, res) => {
       `INSERT INTO listings (
         source, source_url, report_url, title, price, currency, mileage, description, location, phone,
         production_year, import_year, history_rating, personal_rating, status, history_note,
-        personal_comment, ai_rating, ai_comment, fuel_type, gearbox, engine_capacity, power_hp, body_type, drive_type, color, vin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        personal_comment, ai_rating, ai_comment, fuel_type, gearbox, engine_capacity, power_hp, body_type, drive_type, color, equipment, vin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         req.body.source || 'manual',
         sourceUrl || `manual://${Date.now()}`,
@@ -908,6 +1088,7 @@ app.post('/listings', async (req, res) => {
         req.body.body_type || null,
         req.body.drive_type || null,
         req.body.color || null,
+        serializeEquipment(parseEquipmentInput(req.body.equipment)),
         vin
       ]
     );
@@ -927,7 +1108,7 @@ app.post('/listings/:id/update', async (req, res) => {
   }
 
   const status = STATUS_OPTIONS.includes(req.body.status) ? req.body.status : null;
-  const vin = String(req.body.vin || '').trim().toUpperCase() || null;
+  const vin = normalizeVin(req.body.vin) || null;
 
   try {
     const pool = getPool();
@@ -955,6 +1136,7 @@ app.post('/listings/:id/update', async (req, res) => {
         report_url = ?,
         phone = ?,
         import_year = ?,
+        equipment = ?,
         vin = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`,
@@ -969,6 +1151,7 @@ app.post('/listings/:id/update', async (req, res) => {
         normalizeUrl(req.body.report_url) || null,
         req.body.phone || null,
         toIntOrNull(req.body.import_year),
+        serializeEquipment(parseEquipmentInput(req.body.equipment)),
         vin,
         id
       ]
@@ -1064,11 +1247,26 @@ app.post('/listings/:id/reject', async (req, res) => {
 
   try {
     const pool = getPool();
-    await pool.query('UPDATE listings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['Odrzucone', id]);
-    if (wantsJson(req)) {
-      return res.json({ ok: true, id, status: 'Odrzucone' });
+    const [rows] = await pool.query('SELECT status FROM listings WHERE id = ? LIMIT 1', [id]);
+    if (!rows || rows.length === 0) {
+      if (wantsJson(req)) {
+        return res.status(404).json({ error: 'listing_not_found' });
+      }
+      return res.redirect('/?error=Nie%20znaleziono%20og%C5%82oszenia');
     }
-    return res.redirect('/?message=Og%C5%82oszenie%20odrzucone');
+
+    const currentStatus = rows[0].status || 'Nowe';
+    const nextStatus = currentStatus === 'Odrzucone' ? 'Nowe' : 'Odrzucone';
+
+    await pool.query('UPDATE listings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [nextStatus, id]);
+    if (wantsJson(req)) {
+      return res.json({ ok: true, id, status: nextStatus });
+    }
+
+    if (nextStatus === 'Odrzucone') {
+      return res.redirect('/?message=Og%C5%82oszenie%20odrzucone');
+    }
+    return res.redirect('/?message=Przywr%C3%B3cono%20status%20og%C5%82oszenia');
   } catch {
     if (wantsJson(req)) {
       return res.status(500).json({ error: 'reject_failed' });
@@ -1098,6 +1296,141 @@ app.post('/listings/:id/delete', async (req, res) => {
       return res.status(500).json({ error: 'delete_failed' });
     }
     return res.redirect('/?error=Nie%20uda%C5%82o%20si%C4%99%20usun%C4%85%C4%87%20og%C5%82oszenia');
+  }
+});
+
+app.post('/listings/:id/deactivate', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    if (wantsJson(req)) return res.status(400).json({ error: 'invalid_id' });
+    return res.redirect('/?error=Nieprawid%C5%82owe%20ID');
+  }
+
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query('SELECT status FROM listings WHERE id = ? LIMIT 1', [id]);
+    if (!rows || !rows.length) {
+      if (wantsJson(req)) return res.status(404).json({ error: 'listing_not_found' });
+      return res.redirect('/?error=Nie%20znaleziono%20og%C5%82oszenia');
+    }
+
+    const currentStatus = rows[0].status || 'Nowe';
+    const nextStatus = currentStatus === 'Nieaktualne' ? 'Nowe' : 'Nieaktualne';
+
+    await pool.query('UPDATE listings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [nextStatus, id]);
+
+    if (wantsJson(req)) return res.json({ ok: true, id, status: nextStatus });
+    return nextStatus === 'Nieaktualne'
+      ? res.redirect('/?message=Og%C5%82oszenie%20oznaczone%20jako%20nieaktualne')
+      : res.redirect('/?message=Przywr%C3%B3cono%20status%20og%C5%82oszenia');
+  } catch {
+    if (wantsJson(req)) return res.status(500).json({ error: 'deactivate_failed' });
+    return res.redirect('/?error=B%C5%82%C4%85d%20zmiany%20statusu');
+  }
+});
+
+app.post('/listings/:id/refresh', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    if (wantsJson(req)) return res.status(400).json({ error: 'invalid_id' });
+    return res.redirect('/?error=Nieprawid%C5%82owe%20ID');
+  }
+
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      'SELECT id, source_url, status FROM listings WHERE id = ? LIMIT 1',
+      [id]
+    );
+    const listing = rows[0];
+    if (!listing) {
+      if (wantsJson(req)) return res.status(404).json({ error: 'listing_not_found' });
+      return res.redirect('/?error=Nie%20znaleziono%20og%C5%82oszenia');
+    }
+
+    const sourceUrl = String(listing.source_url || '').trim();
+    if (!sourceUrl || !/^https?:\/\//i.test(sourceUrl)) {
+      if (wantsJson(req)) return res.status(400).json({ error: 'no_source_url' });
+      return res.redirect('/?error=Brak%20URL%20%C5%BAr%C3%B3d%C5%82owego');
+    }
+
+    let scraped;
+    try {
+      scraped = await scrapeListing(sourceUrl);
+    } catch (scrapeError) {
+      const httpStatus = scrapeError?.response?.status;
+      if (httpStatus === 404 || httpStatus === 410) {
+        await pool.query(
+          'UPDATE listings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          ['Nieaktualne', id]
+        );
+        if (wantsJson(req)) return res.json({ ok: true, id, gone: true, status: 'Nieaktualne' });
+        return res.redirect('/?message=Og%C5%82oszenie%20zosta%C5%82o%20zdj%C4%99te%20z%20portalu%20%E2%80%93%20oznaczono%20jako%20Nieaktualne');
+      }
+      throw scrapeError;
+    }
+
+    const equipmentJson = serializeEquipment(scraped.equipment);
+    const equipmentList = parseListingEquipment(equipmentJson);
+
+    await pool.query(
+      `UPDATE listings SET
+        title             = COALESCE(?, title),
+        price             = COALESCE(?, price),
+        currency          = COALESCE(?, currency),
+        mileage           = COALESCE(?, mileage),
+        description       = COALESCE(?, description),
+        location          = COALESCE(?, location),
+        phone             = COALESCE(?, phone),
+        production_year   = COALESCE(?, production_year),
+        fuel_type         = COALESCE(?, fuel_type),
+        gearbox           = COALESCE(?, gearbox),
+        engine_capacity   = COALESCE(?, engine_capacity),
+        power_hp          = COALESCE(?, power_hp),
+        body_type         = COALESCE(?, body_type),
+        drive_type        = COALESCE(?, drive_type),
+        color             = COALESCE(?, color),
+        equipment         = ?,
+        updated_at        = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+      [
+        scraped.title,
+        scraped.price,
+        scraped.currency,
+        scraped.mileage,
+        scraped.description,
+        scraped.location,
+        scraped.phone,
+        scraped.productionYear,
+        scraped.fuelType,
+        scraped.gearbox,
+        scraped.engineCapacity,
+        scraped.powerHp,
+        scraped.bodyType,
+        scraped.driveType,
+        scraped.color,
+        equipmentJson,
+        id
+      ]
+    );
+
+    if (wantsJson(req)) {
+      return res.json({
+        ok: true,
+        id,
+        gone: false,
+        title: scraped.title,
+        price: scraped.price ? Number(scraped.price) : null,
+        currency: scraped.currency || 'PLN',
+        mileage: scraped.mileage ? Number(scraped.mileage) : null,
+        equipmentList,
+        equipmentText: equipmentList.join('\n')
+      });
+    }
+    return res.redirect('/?message=Og%C5%82oszenie%20zaktualizowane');
+  } catch (error) {
+    if (wantsJson(req)) return res.status(502).json({ error: 'refresh_failed', message: error.message });
+    return res.redirect('/?error=Nie%20uda%C5%82o%20si%C4%99%20zaktualizowa%C4%87%20og%C5%82oszenia');
   }
 });
 

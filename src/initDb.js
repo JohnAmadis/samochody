@@ -91,7 +91,8 @@ async function runMigrations() {
   await ensureListingColumn('route_calculated_at', 'TIMESTAMP NULL AFTER route_duration_min');
   await ensureListingColumn('ai_rating', 'TINYINT NULL AFTER personal_comment');
   await ensureListingColumn('ai_comment', 'TEXT NULL AFTER ai_rating');
-  await ensureListingColumn('vin', 'VARCHAR(17) NULL AFTER color');
+  await ensureListingColumn('equipment', 'TEXT NULL AFTER color');
+  await ensureListingColumn('vin', 'VARCHAR(17) NULL AFTER equipment');
   await ensureRouteCacheTable();
   await ensureSourceUrlIsNotUnique();
   await ensureUniqueVinIndex();

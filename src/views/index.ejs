@@ -43,6 +43,8 @@
         (selectedStatuses || []).forEach((statusValue) => params.append('status', statusValue));
         (progressInclude || []).forEach((f) => params.append('progress_include', f));
         (progressExclude || []).forEach((f) => params.append('progress_exclude', f));
+        (equipmentInclude || []).forEach((f) => params.append('equipment_include', f));
+        (equipmentExclude || []).forEach((f) => params.append('equipment_exclude', f));
         if (q) params.set('q', q);
         if (origin) params.set('origin', origin);
         params.set('sort_by', column);
@@ -124,6 +126,56 @@
                   value="<%= opt.field %>"
                   id="pe_<%= opt.field %>"
                   <%= progExcSet.has(opt.field) ? 'checked' : '' %>
+                />
+              </div>
+            <% }) %>
+          </div>
+        </div>
+        <%
+          const equipIncSet = new Set(equipmentInclude || []);
+          const equipExcSet = new Set(equipmentExclude || []);
+          const equipActiveCount = equipIncSet.size + equipExcSet.size;
+          let equipmentLabel;
+          if (equipActiveCount === 0) {
+            equipmentLabel = 'Dowolne wyposażenie';
+          } else {
+            const parts = [];
+            if (equipIncSet.size > 0) parts.push(equipIncSet.size + ' wymagane');
+            if (equipExcSet.size > 0) parts.push(equipExcSet.size + ' wyklucz.');
+            equipmentLabel = 'Wyposażenie: ' + parts.join(', ');
+          }
+        %>
+        <div class="status-dropdown" id="equipmentDropdown">
+          <button type="button" class="status-dropdown-btn" id="equipmentDropdownBtn" aria-expanded="false" aria-haspopup="listbox">
+            <span class="status-dropdown-label" id="equipmentDropdownLabel"><%= equipmentLabel %></span>
+            <span class="status-dropdown-arrow">▾</span>
+          </button>
+          <div class="status-dropdown-panel" id="equipmentDropdownPanel" role="listbox">
+            <div class="prog-col-headers">
+              <span class="prog-col-inc">Ma mieć</span>
+              <span class="prog-col-exc">Ma nie mieć</span>
+            </div>
+            <% if ((equipmentOptions || []).length === 0) { %>
+              <div class="equipment-filter-empty">Brak wykrytego wyposażenia</div>
+            <% } %>
+            <% (equipmentOptions || []).forEach(function(opt, idx) { %>
+              <div class="equipment-filter-item" data-field="<%= opt %>">
+                <input
+                  class="eq-check eq-include"
+                  type="checkbox"
+                  name="equipment_include"
+                  value="<%= opt %>"
+                  id="ei_<%= idx %>"
+                  <%= equipIncSet.has(opt) ? 'checked' : '' %>
+                />
+                <label class="equipment-item-label" for="ei_<%= idx %>"><%= opt %></label>
+                <input
+                  class="eq-check eq-exclude"
+                  type="checkbox"
+                  name="equipment_exclude"
+                  value="<%= opt %>"
+                  id="ee_<%= idx %>"
+                  <%= equipExcSet.has(opt) ? 'checked' : '' %>
                 />
               </div>
             <% }) %>
@@ -252,6 +304,16 @@
                 <% if (listing.images && listing.images.length) { %>
                   <img src="<%= listing.images[0].local_path || listing.images[0].original_url %>" alt="Zdjęcie auta" class="thumb" />
                 <% } %>
+                <% if (listing.equipmentList && listing.equipmentList.length) { %>
+                  <div class="equipment-chips" data-all="<%= listing.equipmentList.map(function(e){return e.replace(/"/g,'&quot;');}).join('|||') %>">
+                    <% listing.equipmentList.slice(0, 5).forEach(function(item) { %>
+                      <span class="eq-chip"><%= item %></span>
+                    <% }) %>
+                    <% if (listing.equipmentList.length > 5) { %>
+                      <button class="eq-more-btn" type="button">+<%= listing.equipmentList.length - 5 %> więcej</button>
+                    <% } %>
+                  </div>
+                <% } %>
               </td>
               <td><%= listing.price ? Number(listing.price).toLocaleString('pl-PL') + ' ' + (listing.currency || 'PLN') : '-' %></td>
               <td><%= listing.mileage ? Number(listing.mileage).toLocaleString('pl-PL') + ' km' : '-' %></td>
@@ -280,6 +342,9 @@
                   ></span>
                   <% if (listing.status === 'Odrzucone') { %>
                     <span class="status-mark" title="Odrzucone">✖</span>
+                  <% } %>
+                  <% if (listing.status === 'Nieaktualne') { %>
+                    <span class="status-mark status-mark-deactivate" title="Nieaktualne">⊘</span>
                   <% } %>
                 </div>
               </td>
@@ -355,8 +420,12 @@
               <td>
                 <div class="row-actions">
                   <form method="post" action="/listings/<%= listing.id %>/reject" class="inline-form">
-                    <button class="btn btn-small btn-danger" type="submit" title="Odrzuć">✖</button>
+                    <button class="btn btn-small btn-danger" type="submit" title="Odrzuć (toggle)">✖</button>
                   </form>
+                  <form method="post" action="/listings/<%= listing.id %>/deactivate" class="inline-form">
+                    <button class="btn btn-small btn-deactivate" type="submit" title="Nieaktualne (toggle)">⊘</button>
+                  </form>
+                  <button class="btn btn-small btn-refresh refresh-btn" data-id="<%= listing.id %>" type="button" title="Zaktualizuj dane z portalu">↻</button>
                   <form method="post" action="/listings/<%= listing.id %>/delete" class="inline-form" onsubmit="return confirm('Usunąć ogłoszenie?');">
                     <button class="btn btn-small btn-ghost" type="submit" title="Usuń">🗑</button>
                   </form>
@@ -373,6 +442,7 @@
                   <label>Ocena historii (1-5)<input type="number" min="1" max="5" name="history_rating" value="<%= listing.history_rating || '' %>" /></label>
                   <label>Ocena AI (1-5)<input type="number" min="1" max="5" name="ai_rating" value="<%= listing.ai_rating || '' %>" /></label>
                   <label>Telefon<input type="text" name="phone" value="<%= listing.phone || '' %>" /></label>
+                  <label>Wyposażenie (1 element w linii)<textarea name="equipment"><%= listing.equipmentText || '' %></textarea></label>
                   <label>Raport (URL CarVertical)<input type="url" name="report_url" value="<%= listing.report_url || '' %>" placeholder="https://www.carvertical.com/..." /></label>
                   <label>Komentarz osobisty<textarea name="personal_comment"><%= listing.personal_comment || '' %></textarea></label>
                   <label>Komentarz AI<textarea name="ai_comment"><%= listing.ai_comment || '' %></textarea></label>
@@ -393,6 +463,9 @@
       <form method="post" action="/import" class="duplicate-check-form">
         <label>URL ogłoszenia (otomoto / autoplac)
           <input type="url" name="source_url" required placeholder="https://www.otomoto.pl/..." />
+        </label>
+        <label>VIN
+          <input type="text" name="vin" placeholder="opcjonalnie" maxlength="17" />
         </label>
         <input type="hidden" name="confirm_duplicate" value="0" />
         <input type="hidden" name="current_origin" value="<%= origin || '' %>" class="current-origin-input" />
@@ -427,6 +500,7 @@
         <label>Typ nadwozia<input type="text" name="body_type" /></label>
         <label>Napęd<input type="text" name="drive_type" /></label>
         <label>Kolor<input type="text" name="color" /></label>
+        <label class="full">Wyposażenie (1 element w linii)<textarea name="equipment"></textarea></label>
         <label>Status
           <select name="status">
             <% statusOptions.forEach(function(opt) { %>
@@ -529,6 +603,69 @@
         if (incChecked > 0) parts.push(incChecked + ' włącz.');
         if (excChecked > 0) parts.push(excChecked + ' wyklucz.');
         label.textContent = 'Postęp: ' + parts.join(', ');
+      }
+    })();
+    // ────────────────────────────────────────────────────────────────────────
+
+    // ── Equipment dropdown ──────────────────────────────────────────────────
+    (function initEquipmentDropdown() {
+      const btn = document.getElementById('equipmentDropdownBtn');
+      const panel = document.getElementById('equipmentDropdownPanel');
+      const dropdown = document.getElementById('equipmentDropdown');
+      const label = document.getElementById('equipmentDropdownLabel');
+      if (!btn || !panel || !dropdown || !label) return;
+
+      function openDropdown() {
+        panel.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+        dropdown.classList.add('is-open');
+      }
+
+      function closeDropdown() {
+        panel.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        dropdown.classList.remove('is-open');
+      }
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        panel.classList.contains('open') ? closeDropdown() : openDropdown();
+      });
+
+      document.addEventListener('click', function (e) {
+        if (!dropdown.contains(e.target)) closeDropdown();
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeDropdown();
+      });
+
+      panel.addEventListener('change', function (e) {
+        const chk = e.target;
+        if (!chk.matches('.eq-check')) return;
+        const item = chk.closest('.equipment-filter-item');
+        if (!item) return;
+        if (chk.checked) {
+          const opposite = chk.classList.contains('eq-include') ? 'eq-exclude' : 'eq-include';
+          const other = item.querySelector('.' + opposite);
+          if (other) other.checked = false;
+        }
+        updateEquipmentLabel();
+      });
+
+      function updateEquipmentLabel() {
+        const incChecked = panel.querySelectorAll('.eq-include:checked').length;
+        const excChecked = panel.querySelectorAll('.eq-exclude:checked').length;
+        const total = incChecked + excChecked;
+        if (total === 0) {
+          label.textContent = 'Dowolne wyposażenie';
+          return;
+        }
+
+        const parts = [];
+        if (incChecked > 0) parts.push(incChecked + ' wymagane');
+        if (excChecked > 0) parts.push(excChecked + ' wyklucz.');
+        label.textContent = 'Wyposażenie: ' + parts.join(', ');
       }
     })();
     // ────────────────────────────────────────────────────────────────────────
@@ -736,7 +873,7 @@
     });
 
     function extractListingAction(action) {
-      const match = String(action || '').match(/\/listings\/(\d+)\/(rating|flag|reject|delete)$/);
+      const match = String(action || '').match(/\/listings\/(\d+)\/(rating|flag|reject|deactivate|delete)$/);
       if (!match) {
         return null;
       }
@@ -798,20 +935,33 @@
       }
     }
 
-    function applyRejectedState(row) {
+    function statusToCssClass(status) {
+      return `status-${String(status || 'Nowe').toLowerCase().replace(/\s+/g, '-')}`;
+    }
+
+    function applyStatusState(row, status) {
       const dot = row.querySelector('.status-dot');
       if (dot) {
-        dot.className = 'status-dot status-odrzucone';
-        dot.title = 'Odrzucone';
+        dot.className = `status-dot ${statusToCssClass(status)}`;
+        dot.title = status;
       }
 
       const statusIcons = row.querySelector('.status-icons');
-      if (statusIcons && !statusIcons.querySelector('.status-mark')) {
-        const mark = document.createElement('span');
-        mark.className = 'status-mark';
-        mark.title = 'Odrzucone';
-        mark.textContent = '✖';
-        statusIcons.appendChild(mark);
+      if (statusIcons) {
+        statusIcons.querySelectorAll('.status-mark').forEach((m) => m.remove());
+        if (status === 'Odrzucone') {
+          const mark = document.createElement('span');
+          mark.className = 'status-mark';
+          mark.title = 'Odrzucone';
+          mark.textContent = '✖';
+          statusIcons.appendChild(mark);
+        } else if (status === 'Nieaktualne') {
+          const mark = document.createElement('span');
+          mark.className = 'status-mark status-mark-deactivate';
+          mark.title = 'Nieaktualne';
+          mark.textContent = '⊘';
+          statusIcons.appendChild(mark);
+        }
       }
     }
 
@@ -846,7 +996,9 @@
             } else if (parsed.type === 'flag') {
               applyFlagState(form, result.value);
             } else if (parsed.type === 'reject') {
-              applyRejectedState(row);
+              applyStatusState(row, result.status || 'Odrzucone');
+            } else if (parsed.type === 'deactivate') {
+              applyStatusState(row, result.status || 'Nieaktualne');
             } else if (parsed.type === 'delete') {
               const editRow = document.getElementById(`edit-${parsed.id}`);
               row.remove();
@@ -867,8 +1019,125 @@
 
     wireAsyncListingActions();
 
+    // ── Refresh buttons ───────────────────────────────────────────────────────
+    document.querySelectorAll('.refresh-btn').forEach((btn) => {
+      btn.addEventListener('click', async function () {
+        const id = btn.dataset.id;
+        const row = btn.closest('tr[data-listing-id]');
+        btn.disabled = true;
+        btn.textContent = '…';
+
+        try {
+          const response = await fetch(`/listings/${id}/refresh`, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          const result = await response.json();
+
+          if (result.gone) {
+            if (row) applyStatusState(row, 'Nieaktualne');
+            btn.textContent = '↻';
+            btn.title = 'Zaktualizuj dane z portalu (oznaczono jako Nieaktualne)';
+            return;
+          }
+
+          // Update price cell
+          if (result.price != null) {
+            const priceCell = row && row.querySelectorAll('td')[2];
+            if (priceCell) {
+              priceCell.textContent = Number(result.price).toLocaleString('pl-PL') + ' ' + (result.currency || 'PLN');
+            }
+          }
+
+          // Update mileage cell
+          if (result.mileage != null) {
+            const mileageCell = row && row.querySelectorAll('td')[3];
+            if (mileageCell) {
+              mileageCell.textContent = Number(result.mileage).toLocaleString('pl-PL') + ' km';
+            }
+          }
+
+          // Update equipment chips
+          if (result.equipmentList) {
+            let chipsDiv = row && row.querySelector('.equipment-chips');
+            const titleCell = row && row.querySelectorAll('td')[1];
+            if (result.equipmentList.length > 0) {
+              if (!chipsDiv && titleCell) {
+                chipsDiv = document.createElement('div');
+                chipsDiv.className = 'equipment-chips';
+                titleCell.appendChild(chipsDiv);
+              }
+              if (chipsDiv) {
+                chipsDiv.innerHTML = '';
+                result.equipmentList.slice(0, 5).forEach((item) => {
+                  const chip = document.createElement('span');
+                  chip.className = 'eq-chip';
+                  chip.textContent = item;
+                  chipsDiv.appendChild(chip);
+                });
+                if (result.equipmentList.length > 5) {
+                  const moreBtn = document.createElement('button');
+                  moreBtn.className = 'eq-more-btn';
+                  moreBtn.type = 'button';
+                  moreBtn.textContent = '+' + (result.equipmentList.length - 5) + ' więcej';
+                  chipsDiv.appendChild(moreBtn);
+                  wireMoreBtn(moreBtn);
+                }
+              }
+            }
+
+            // Update textarea in edit row
+            const editRow = document.getElementById(`edit-${id}`);
+            if (editRow) {
+              const ta = editRow.querySelector('textarea[name="equipment"]');
+              if (ta) ta.value = result.equipmentText || '';
+            }
+          }
+
+          btn.textContent = '✔';
+          setTimeout(() => { btn.textContent = '↻'; }, 2000);
+        } catch {
+          btn.textContent = '!';
+          setTimeout(() => { btn.textContent = '↻'; }, 2000);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Equipment expand buttons ──────────────────────────────────────────────
+    function wireMoreBtn(btn) {
+      btn.addEventListener('click', function () {
+        const chipsDiv = btn.closest('.equipment-chips');
+        if (!chipsDiv) return;
+        const all = (chipsDiv.dataset.all || '').split('|||').filter(Boolean);
+        chipsDiv.innerHTML = '';
+        all.forEach((item) => {
+          const chip = document.createElement('span');
+          chip.className = 'eq-chip';
+          chip.textContent = item;
+          chipsDiv.appendChild(chip);
+        });
+      });
+    }
+    document.querySelectorAll('.eq-more-btn').forEach(wireMoreBtn);
+    // ─────────────────────────────────────────────────────────────────────────
+
     async function checkDuplicateUrl(sourceUrl) {
       const response = await fetch('/api/listings/check-url?source_url=' + encodeURIComponent(sourceUrl), {
+        headers: { Accept: 'application/json' }
+      });
+
+      if (!response.ok) {
+        return { exists: false };
+      }
+
+      return response.json();
+    }
+
+    async function checkDuplicateVin(vin) {
+      const response = await fetch('/api/listings/check-vin?vin=' + encodeURIComponent(vin), {
         headers: { Accept: 'application/json' }
       });
 
@@ -882,8 +1151,29 @@
     document.querySelectorAll('.duplicate-check-form').forEach((form) => {
       form.addEventListener('submit', async function (event) {
         const urlInput = form.querySelector('input[name="source_url"]');
+        const vinInput = form.querySelector('input[name="vin"]');
         const duplicateInput = form.querySelector('input[name="confirm_duplicate"]');
         const sourceUrl = (urlInput?.value || '').trim();
+        const vin = (vinInput?.value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        if (vinInput) {
+          vinInput.value = vin;
+        }
+
+        if (vin) {
+          event.preventDefault();
+
+          try {
+            const vinResult = await checkDuplicateVin(vin);
+            if (vinResult.exists) {
+              const existingId = vinResult.listing?.id ? `ID: ${vinResult.listing.id}` : 'istniejące ogłoszenie';
+              alert(`Auto o VIN ${vin} już jest zapisane (${existingId}).`);
+              return;
+            }
+          } catch {
+            // ignore and continue with submit flow
+          }
+        }
 
         if (!sourceUrl || duplicateInput?.value === '1') {
           return;

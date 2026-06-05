@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS listings (
   body_type VARCHAR(50) NULL,
   drive_type VARCHAR(50) NULL,
   color VARCHAR(50) NULL,
+  equipment TEXT NULL,
   vin VARCHAR(17) NULL,
   route_origin VARCHAR(255) NULL,
   route_distance_km DECIMAL(8,1) NULL,

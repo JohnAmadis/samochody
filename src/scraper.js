@@ -167,6 +167,115 @@ function parameterLabel(parametersDict = {}, key) {
   return values[0]?.label || values[0]?.value || null;
 }
 
+function normalizeEquipmentName(value) {
+  if (!value) return null;
+  const normalized = String(value).replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  if (normalized.length < 2 || normalized.length > 120) return null;
+  if (/^(tak|nie|yes|no|true|false|brak)$/i.test(normalized)) return null;
+  return normalized;
+}
+
+function uniqueEquipment(items) {
+  const seen = new Set();
+  const result = [];
+
+  for (const item of items || []) {
+    const normalized = normalizeEquipmentName(item);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+  }
+
+  return result;
+}
+
+function collectStringLeaves(input, output, visited = new Set()) {
+  if (input === null || input === undefined) return;
+
+  if (typeof input === 'string' || typeof input === 'number') {
+    output.push(String(input));
+    return;
+  }
+
+  if (typeof input !== 'object') return;
+  if (visited.has(input)) return;
+  visited.add(input);
+
+  if (Array.isArray(input)) {
+    input.forEach((item) => collectStringLeaves(item, output, visited));
+    return;
+  }
+
+  Object.values(input).forEach((value) => collectStringLeaves(value, output, visited));
+}
+
+function extractOtomotoEquipment(advert, parametersDict = {}) {
+  const collected = [];
+
+  const directSources = [
+    advert?.features,
+    advert?.equipment,
+    advert?.featuresByCategory,
+    advert?.equipmentByCategory,
+    advert?.attributes
+  ];
+
+  for (const source of directSources) {
+    collectStringLeaves(source, collected);
+  }
+
+  const equipmentKeyRegex = /(equipment|wyposaz|feature|udogodn|komfort|bezpieczen|multimedia)/i;
+  Object.entries(parametersDict || {}).forEach(([key, value]) => {
+    if (!equipmentKeyRegex.test(key)) return;
+    collectStringLeaves(value, collected);
+  });
+
+  return uniqueEquipment(collected);
+}
+
+function extractAutoplacEquipment($, rawHtml) {
+  // Autoplac is Angular SSR – equipment is embedded as JSON: "equipment":["ABS","ESP",...]
+  // This is the most reliable extraction path.
+  if (rawHtml) {
+    const jsonMatch = rawHtml.match(/"equipment":\[((?:[^[\]]*?))\]/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse('[' + jsonMatch[1] + ']');
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return uniqueEquipment(parsed);
+        }
+      } catch {
+        // fall through to DOM approach
+      }
+    }
+  }
+
+  // DOM fallback: Angular renders equipment as div.equipment__value children
+  const domSelectors = [
+    '.equipment__value',
+    '[class*="equipment__value"]',
+    '[class*="equipment"] li',
+    '[class*="feature"] li',
+    '.equipment li',
+    '.features li',
+    '.offer-equipment li',
+    '.offer-features li'
+  ];
+
+  const values = [];
+  domSelectors.forEach((selector) => {
+    $(selector).each((_, element) => {
+      const text = $(element).clone().children('img').remove().end().text();
+      values.push(text);
+    });
+  });
+
+  return uniqueEquipment(values);
+}
+
 function extractOtomotoData(nextData, url) {
   const advert = nextData?.props?.pageProps?.advert;
   if (!advert) return null;
@@ -180,6 +289,7 @@ function extractOtomotoData(nextData, url) {
   const enginePowerRaw = parameterLabel(parametersDict, 'engine_power') || detailValue(details, 'engine_power');
   const phoneFromAdvert = collectPhonesFromObject(advert, true)[0] || null;
   const phoneFromPageProps = collectPhonesFromObject(nextData?.props?.pageProps, true)[0] || null;
+  const equipment = extractOtomotoEquipment(advert, parametersDict);
 
   return {
     source: 'otomoto',
@@ -209,6 +319,7 @@ function extractOtomotoData(nextData, url) {
     bodyType: parameterLabel(parametersDict, 'body_type') || detailValue(details, 'body_type'),
     driveType: parameterLabel(parametersDict, 'transmission') || detailValue(details, 'transmission'),
     color: parameterLabel(parametersDict, 'color') || detailValue(details, 'color'),
+    equipment,
     imageUrls: photos.map((item) => item?.url).filter((item) => typeof item === 'string' && item.startsWith('http'))
   };
 }
@@ -251,6 +362,7 @@ function parseListingData(url, html) {
   const nextData = parseNextData($);
   const otomotoData = source === 'otomoto' ? extractOtomotoData(nextData, url) : null;
   const autoplacLocation = source === 'autoplac' ? extractAutoplacLocation($) : null;
+  const autoplacEquipment = source === 'autoplac' ? extractAutoplacEquipment($, html) : [];
 
   const pageText = $('body').text().replace(/\s+/g, ' ');
   const title =
@@ -345,6 +457,7 @@ function parseListingData(url, html) {
   const color =
     otomotoData?.color ||
     extractByRegex(pageText, /(?:kolor|color)\s*[:\-]?\s*([A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż ]{3,30})/i);
+  const equipment = uniqueEquipment([...(otomotoData?.equipment || []), ...autoplacEquipment]);
 
   return {
     source,
@@ -370,6 +483,7 @@ function parseListingData(url, html) {
     bodyType,
     driveType,
     color,
+    equipment,
     imageUrls: collectImages($, jsonLdObjects, otomotoData?.imageUrls || [])
   };
 }

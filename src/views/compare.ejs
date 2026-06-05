@@ -34,6 +34,15 @@
               <% }) %>
             </tr>
             <% const fields = [
+              ['Wyposażenie', (l) => {
+                if (!l.equipment) return '-';
+                try {
+                  const parsed = JSON.parse(l.equipment);
+                  return Array.isArray(parsed) && parsed.length ? parsed.join(', ') : '-';
+                } catch {
+                  return l.equipment;
+                }
+              }],
               ['Cena', (l) => l.price ? Number(l.price).toLocaleString('pl-PL') + ' ' + (l.currency || 'PLN') : '-'],
               ['Przebieg', (l) => l.mileage ? Number(l.mileage).toLocaleString('pl-PL') + ' km' : '-'],
               ['Rok produkcji', (l) => l.production_year || '-'],
