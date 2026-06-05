@@ -5,7 +5,7 @@ if (typeof global.File === 'undefined') {
 }
 
 const cheerio = require('cheerio');
-const { canonicalizeEquipmentItem, uniqueEquipment } = require('./equipmentNormalizer');
+const { canonicalizeEquipmentItem, uniqueEquipment, extractEquipmentFromDescription } = require('./equipmentNormalizer');
 
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -435,7 +435,11 @@ function parseListingData(url, html) {
   const color =
     otomotoData?.color ||
     extractByRegex(pageText, /(?:kolor|color)\s*[:\-]?\s*([A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż ]{3,30})/i);
-  const equipment = uniqueEquipment([...(otomotoData?.equipment || []), ...autoplacEquipment]);
+  const equipment = uniqueEquipment([
+    ...(otomotoData?.equipment || []),
+    ...autoplacEquipment,
+    ...extractEquipmentFromDescription(description)
+  ]);
 
   return {
     source,

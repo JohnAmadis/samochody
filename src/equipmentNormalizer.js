@@ -143,6 +143,28 @@ function canonicalizeEquipmentItem(rawItem) {
 }
 
 /**
+ * Przeszukuje tekst opisu ogłoszenia w poszukiwaniu znanych (kanoniczych)
+ * nazw wyposażenia. Dopasowanie uwzględnia polskie znaki diakrytyczne jako
+ * część słowa, więc np. „abs" nie trafi w „absorpcja".
+ * Zwraca tablicę kanoniczych nazw wyposażenia znalezionych w opisie.
+ */
+function extractEquipmentFromDescription(description) {
+  if (!description) return [];
+  const text = String(description).toLowerCase();
+  const found = [];
+  // Polska definicja „znaku słownego" – obejmuje litery z ogonkami i cyfry.
+  const W = '[a-ząćęłńóśźż0-9_]';
+  for (const canonical of EQUIPMENT_CANONICAL) {
+    const escaped = canonical.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`(?<!${W})${escaped}(?!${W})`, 'i');
+    if (pattern.test(text)) {
+      found.push(canonical);
+    }
+  }
+  return found;
+}
+
+/**
  * Zwraca unikalną, znormalizowaną tablicę nazw wyposażenia
  * (deduplikacja po kanonicznej nazwie lowercase).
  */
@@ -159,4 +181,4 @@ function uniqueEquipment(items) {
   return result.sort((a, b) => a.localeCompare(b, 'pl', { sensitivity: 'base' }));
 }
 
-module.exports = { EQUIPMENT_CANONICAL, canonicalizeEquipmentItem, uniqueEquipment };
+module.exports = { EQUIPMENT_CANONICAL, canonicalizeEquipmentItem, uniqueEquipment, extractEquipmentFromDescription };
