@@ -6,6 +6,7 @@ const { waitForDb, getPool } = require('./db');
 const { initializeDb } = require('./initDb');
 const { scrapeListing, detectSource } = require('./scraper');
 const { saveImagesLocally } = require('./imageStore');
+const { canonicalizeEquipmentItem, uniqueEquipment: uniqueEquipmentItems } = require('./equipmentNormalizer');
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -401,43 +402,24 @@ function normalizeProgressFilters(raw) {
   return arr.filter((f) => PROGRESS_FIELDS.includes(f));
 }
 
-function normalizeEquipmentName(value) {
-  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!normalized) return null;
-  if (normalized.length < 2 || normalized.length > 120) return null;
-  return normalized;
-}
-
 function normalizeEquipmentFilters(raw) {
   if (!raw) return [];
   const arr = Array.isArray(raw) ? raw : [raw];
-  const seen = new Set();
-  const result = [];
-
-  for (const item of arr) {
-    const normalized = normalizeEquipmentName(item);
-    if (!normalized) continue;
-    const key = normalized.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(normalized);
-  }
-
-  return result;
+  return uniqueEquipmentItems(arr);
 }
 
 function parseEquipmentInput(raw) {
   if (!raw) return [];
   const chunks = Array.isArray(raw) ? raw : [raw];
   const values = chunks.flatMap((value) => String(value).split(/[\n,;|]/g));
-  return normalizeEquipmentFilters(values);
+  return uniqueEquipmentItems(values);
 }
 
 function parseListingEquipment(raw) {
   if (!raw) return [];
 
   if (Array.isArray(raw)) {
-    return normalizeEquipmentFilters(raw);
+    return uniqueEquipmentItems(raw);
   }
 
   if (typeof raw === 'string') {
@@ -447,7 +429,7 @@ function parseListingEquipment(raw) {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
-        return normalizeEquipmentFilters(parsed);
+        return uniqueEquipmentItems(parsed);
       }
     } catch {
       // fallback for legacy/plain text
@@ -460,16 +442,14 @@ function parseListingEquipment(raw) {
 }
 
 function serializeEquipment(equipmentItems) {
-  const normalized = normalizeEquipmentFilters(equipmentItems);
+  const normalized = uniqueEquipmentItems(equipmentItems);
   if (!normalized.length) return null;
   return JSON.stringify(normalized);
 }
 
-function listingMatchesEquipmentFilter(listingEquipment, includeFilters = [], excludeFilters = []) {
-  const normalizedListingSet = new Set((listingEquipment || []).map((item) => String(item).toLowerCase()));
-  const includeOk = (includeFilters || []).every((item) => normalizedListingSet.has(String(item).toLowerCase()));
-  const excludeOk = (excludeFilters || []).every((item) => !normalizedListingSet.has(String(item).toLowerCase()));
-  return includeOk && excludeOk;
+function listingMatchesEquipmentFilter(listingEquipment, includeFilters = []) {
+  const listingSet = new Set((listingEquipment || []).map((item) => String(item).toLowerCase()));
+  return (includeFilters || []).every((item) => listingSet.has(String(item).toLowerCase()));
 }
 
 async function listEquipmentOptions() {
@@ -499,8 +479,7 @@ async function listListings(
   origin = '',
   progressInclude = [],
   progressExclude = [],
-  equipmentInclude = [],
-  equipmentExclude = []
+  equipmentInclude = []
 ) {
   const pool = getPool();
   let query = 'SELECT * FROM listings';
@@ -560,7 +539,7 @@ async function listListings(
         equipmentText: equipmentList.join('\n')
       };
     })
-    .filter((listing) => listingMatchesEquipmentFilter(listing.equipmentList, equipmentInclude, equipmentExclude));
+    .filter((listing) => listingMatchesEquipmentFilter(listing.equipmentList, equipmentInclude));
 
   for (const listing of listings) {
     const [images] = await pool.query(
@@ -619,13 +598,12 @@ app.get('/', async (req, res) => {
     const progressInclude = normalizeProgressFilters(req.query.progress_include);
     const progressExclude = normalizeProgressFilters(req.query.progress_exclude);
     const equipmentInclude = normalizeEquipmentFilters(req.query.equipment_include);
-    const equipmentExclude = normalizeEquipmentFilters(req.query.equipment_exclude);
     const q = String(req.query.q || '').trim();
     const origin = String(req.query.origin || '').trim();
     const sortBy = String(req.query.sort_by || 'created_at');
     const sortDir = String(req.query.sort_dir || 'desc');
     const [listings, equipmentOptions] = await Promise.all([
-      listListings(selectedStatuses, q, sortBy, sortDir, origin, progressInclude, progressExclude, equipmentInclude, equipmentExclude),
+      listListings(selectedStatuses, q, sortBy, sortDir, origin, progressInclude, progressExclude, equipmentInclude),
       listEquipmentOptions()
     ]);
     res.render('index', {
@@ -634,7 +612,6 @@ app.get('/', async (req, res) => {
       progressInclude,
       progressExclude,
       equipmentInclude,
-      equipmentExclude,
       equipmentOptions,
       progressOptions: PROGRESS_OPTIONS,
       q,

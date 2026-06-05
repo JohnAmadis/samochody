@@ -44,7 +44,6 @@
         (progressInclude || []).forEach((f) => params.append('progress_include', f));
         (progressExclude || []).forEach((f) => params.append('progress_exclude', f));
         (equipmentInclude || []).forEach((f) => params.append('equipment_include', f));
-        (equipmentExclude || []).forEach((f) => params.append('equipment_exclude', f));
         if (q) params.set('q', q);
         if (origin) params.set('origin', origin);
         params.set('sort_by', column);
@@ -133,52 +132,36 @@
         </div>
         <%
           const equipIncSet = new Set(equipmentInclude || []);
-          const equipExcSet = new Set(equipmentExclude || []);
-          const equipActiveCount = equipIncSet.size + equipExcSet.size;
-          let equipmentLabel;
-          if (equipActiveCount === 0) {
-            equipmentLabel = 'Dowolne wyposażenie';
-          } else {
-            const parts = [];
-            if (equipIncSet.size > 0) parts.push(equipIncSet.size + ' wymagane');
-            if (equipExcSet.size > 0) parts.push(equipExcSet.size + ' wyklucz.');
-            equipmentLabel = 'Wyposażenie: ' + parts.join(', ');
-          }
+          const equipActiveCount = equipIncSet.size;
+          const equipmentLabel = equipActiveCount === 0
+            ? 'Wyposażenie'
+            : 'Wyposażenie: ' + equipActiveCount + ' wymagane';
         %>
-        <div class="status-dropdown" id="equipmentDropdown">
+        <div class="status-dropdown eq-fullwidth-dropdown" id="equipmentDropdown">
           <button type="button" class="status-dropdown-btn" id="equipmentDropdownBtn" aria-expanded="false" aria-haspopup="listbox">
             <span class="status-dropdown-label" id="equipmentDropdownLabel"><%= equipmentLabel %></span>
             <span class="status-dropdown-arrow">▾</span>
           </button>
-          <div class="status-dropdown-panel" id="equipmentDropdownPanel" role="listbox">
-            <div class="prog-col-headers">
-              <span class="prog-col-inc">Ma mieć</span>
-              <span class="prog-col-exc">Ma nie mieć</span>
-            </div>
+          <div class="status-dropdown-panel eq-fullwidth-panel" id="equipmentDropdownPanel" role="listbox">
             <% if ((equipmentOptions || []).length === 0) { %>
-              <div class="equipment-filter-empty">Brak wykrytego wyposażenia</div>
-            <% } %>
-            <% (equipmentOptions || []).forEach(function(opt, idx) { %>
-              <div class="equipment-filter-item" data-field="<%= opt %>">
-                <input
-                  class="eq-check eq-include"
-                  type="checkbox"
-                  name="equipment_include"
-                  value="<%= opt %>"
-                  id="ei_<%= idx %>"
-                  <%= equipIncSet.has(opt) ? 'checked' : '' %>
-                />
-                <label class="equipment-item-label" for="ei_<%= idx %>"><%= opt %></label>
-                <input
-                  class="eq-check eq-exclude"
-                  type="checkbox"
-                  name="equipment_exclude"
-                  value="<%= opt %>"
-                  id="ee_<%= idx %>"
-                  <%= equipExcSet.has(opt) ? 'checked' : '' %>
-                />
+              <div class="equipment-filter-empty">Brak wykrytego wyposażenia – importuj ogłoszenia by zobaczyć opcje</div>
+            <% } else { %>
+              <div class="eq-grid">
+                <% (equipmentOptions || []).forEach(function(opt, idx) { %>
+                  <label class="eq-filter-label" for="ei_<%= idx %>">
+                    <input
+                      class="eq-check eq-include"
+                      type="checkbox"
+                      name="equipment_include"
+                      value="<%= opt %>"
+                      id="ei_<%= idx %>"
+                      <%= equipIncSet.has(opt) ? 'checked' : '' %>
+                    />
+                    <%= opt %>
+                  </label>
+                <% }) %>
               </div>
-            <% }) %>
+            <% } %>
           </div>
         </div>
         <input
@@ -242,11 +225,6 @@
               </button>
             </th>
             <th>
-              <a class="sort-link" href="<%= buildSortHref('status') %>">
-                Status <span class="sort-indicator"><%= sortIndicator('status') %></span>
-              </a>
-            </th>
-            <th>
               <a class="sort-link" href="<%= buildSortHref('personal_rating') %>">
                 Ocena <span class="sort-indicator"><%= sortIndicator('personal_rating') %></span>
               </a>
@@ -272,7 +250,7 @@
         <tbody>
           <% if (!listings.length) { %>
             <tr>
-              <td colspan="14" class="empty">Brak ogłoszeń. Dodaj pierwsze auto.</td>
+              <td colspan="13" class="empty">Brak ogłoszeń. Dodaj pierwsze auto.</td>
             </tr>
           <% } %>
 
@@ -286,7 +264,15 @@
                 <input type="checkbox" class="compare-check" value="<%= listing.id %>" />
               </td>
               <td>
-                <div class="cell-title"><%= listing.title || 'Bez tytułu' %></div>
+                <%
+                  const statusSlug = (listing.status || 'Nowe').toLowerCase().replace(/\s+/g, '-');
+                  const statusIcons = { 'Odrzucone': '✖', 'Nieaktualne': '⊘' };
+                  const statusIcon = statusIcons[listing.status] || null;
+                %>
+                <div class="cell-title">
+                  <span class="status-dot status-<%= statusSlug %>" title="<%= listing.status || 'Nowe' %>"></span><%
+                  %><% if (statusIcon) { %><span class="status-inline-mark" title="<%= listing.status %>"><%= statusIcon %></span> <% } %><%= listing.title || 'Bez tytułu' %>
+                </div>
                 <div class="listing-links">
                   <% const hasSourceUrl = /^https?:\/\//i.test(listing.source_url || ''); %>
                   <% if (hasSourceUrl) { %>
@@ -333,20 +319,6 @@
                 <% if (!(listing.route_cache_version === routeCacheVersion && listing.route_distance_km != null && listing.route_duration_min != null)) { %>
                   <button class="btn btn-small route-calc-btn" type="button" data-id="<%= listing.id %>">Przelicz</button>
                 <% } %>
-              </td>
-              <td>
-                <div class="status-icons">
-                  <span
-                    class="status-dot status-<%= (listing.status || 'Nowe').toLowerCase().replace(/\s+/g, '-') %>"
-                    title="<%= listing.status || 'Nowe' %>"
-                  ></span>
-                  <% if (listing.status === 'Odrzucone') { %>
-                    <span class="status-mark" title="Odrzucone">✖</span>
-                  <% } %>
-                  <% if (listing.status === 'Nieaktualne') { %>
-                    <span class="status-mark status-mark-deactivate" title="Nieaktualne">⊘</span>
-                  <% } %>
-                </div>
               </td>
               <td>
                 <div class="stars" aria-label="Ocena subiektywna">
@@ -435,7 +407,7 @@
             </tr>
 
             <tr id="edit-<%= listing.id %>" class="edit-row hidden">
-              <td colspan="14">
+              <td colspan="13">
                 <form method="post" action="/listings/<%= listing.id %>/update" class="edit-grid">
                   <label>VIN<input type="text" name="vin" value="<%= listing.vin || '' %>" /></label>
                   <label>Ocena subiektywna (1-5)<input type="number" min="1" max="5" name="personal_rating" value="<%= listing.personal_rating || '' %>" /></label>
@@ -607,7 +579,7 @@
     })();
     // ────────────────────────────────────────────────────────────────────────
 
-    // ── Equipment dropdown ──────────────────────────────────────────────────
+    // ── Equipment dropdown (full-width, fixed) ─────────────────────────────
     (function initEquipmentDropdown() {
       const btn = document.getElementById('equipmentDropdownBtn');
       const panel = document.getElementById('equipmentDropdownPanel');
@@ -615,7 +587,19 @@
       const label = document.getElementById('equipmentDropdownLabel');
       if (!btn || !panel || !dropdown || !label) return;
 
+      function positionPanel() {
+        const rect = btn.getBoundingClientRect();
+        const container = document.querySelector('.container');
+        const cRect = container
+          ? container.getBoundingClientRect()
+          : { left: 8, width: window.innerWidth - 16 };
+        panel.style.top = (rect.bottom + 6) + 'px';
+        panel.style.left = Math.max(0, cRect.left) + 'px';
+        panel.style.width = cRect.width + 'px';
+      }
+
       function openDropdown() {
+        positionPanel();
         panel.classList.add('open');
         btn.setAttribute('aria-expanded', 'true');
         dropdown.classList.add('is-open');
@@ -633,40 +617,16 @@
       });
 
       document.addEventListener('click', function (e) {
-        if (!dropdown.contains(e.target)) closeDropdown();
+        if (!dropdown.contains(e.target) && !panel.contains(e.target)) closeDropdown();
       });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDropdown(); });
+      window.addEventListener('resize', function () { if (panel.classList.contains('open')) positionPanel(); });
+      window.addEventListener('scroll', function () { if (panel.classList.contains('open')) positionPanel(); }, { passive: true });
 
-      document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeDropdown();
+      panel.addEventListener('change', function () {
+        const n = panel.querySelectorAll('.eq-include:checked').length;
+        label.textContent = n === 0 ? 'Wyposażenie' : 'Wyposażenie: ' + n + ' wymagane';
       });
-
-      panel.addEventListener('change', function (e) {
-        const chk = e.target;
-        if (!chk.matches('.eq-check')) return;
-        const item = chk.closest('.equipment-filter-item');
-        if (!item) return;
-        if (chk.checked) {
-          const opposite = chk.classList.contains('eq-include') ? 'eq-exclude' : 'eq-include';
-          const other = item.querySelector('.' + opposite);
-          if (other) other.checked = false;
-        }
-        updateEquipmentLabel();
-      });
-
-      function updateEquipmentLabel() {
-        const incChecked = panel.querySelectorAll('.eq-include:checked').length;
-        const excChecked = panel.querySelectorAll('.eq-exclude:checked').length;
-        const total = incChecked + excChecked;
-        if (total === 0) {
-          label.textContent = 'Dowolne wyposażenie';
-          return;
-        }
-
-        const parts = [];
-        if (incChecked > 0) parts.push(incChecked + ' wymagane');
-        if (excChecked > 0) parts.push(excChecked + ' wyklucz.');
-        label.textContent = 'Wyposażenie: ' + parts.join(', ');
-      }
     })();
     // ────────────────────────────────────────────────────────────────────────
 

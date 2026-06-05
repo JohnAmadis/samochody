@@ -5,6 +5,7 @@ if (typeof global.File === 'undefined') {
 }
 
 const cheerio = require('cheerio');
+const { canonicalizeEquipmentItem, uniqueEquipment } = require('./equipmentNormalizer');
 
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -167,30 +168,7 @@ function parameterLabel(parametersDict = {}, key) {
   return values[0]?.label || values[0]?.value || null;
 }
 
-function normalizeEquipmentName(value) {
-  if (!value) return null;
-  const normalized = String(value).replace(/\s+/g, ' ').trim();
-  if (!normalized) return null;
-  if (normalized.length < 2 || normalized.length > 120) return null;
-  if (/^(tak|nie|yes|no|true|false|brak)$/i.test(normalized)) return null;
-  return normalized;
-}
-
-function uniqueEquipment(items) {
-  const seen = new Set();
-  const result = [];
-
-  for (const item of items || []) {
-    const normalized = normalizeEquipmentName(item);
-    if (!normalized) continue;
-    const key = normalized.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(normalized);
-  }
-
-  return result;
-}
+// normalizeEquipmentName i uniqueEquipment dostarczane przez ./equipmentNormalizer
 
 function collectStringLeaves(input, output, visited = new Set()) {
   if (input === null || input === undefined) return;

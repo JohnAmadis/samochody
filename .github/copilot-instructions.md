@@ -31,4 +31,5 @@ Skrypt automatycznie:
 - Port zewnętrzny aplikacji: `${APP_PORT:-18080}` → wewnętrznie `3000`
 - Port bazy MySQL na hoście: `3307` (wewnętrznie `3306`)
 - Wyposażenie samochodu zapisywane jest jako JSON w kolumnie `equipment TEXT` w tabeli `listings`
+- **Normalizacja wyposażenia**: `src/equipmentNormalizer.js` – lista kanoniczna + fuzzy-merge (Levenshtein ≥ 0.80); zawsze małe litery
 - Autoplac używa Angular SSR – wyposażenie jest w JSON embeddowanym w HTML (`"equipment":[...]`), **nie** w elementach `<li>`
