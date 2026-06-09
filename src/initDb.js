@@ -78,7 +78,18 @@ async function ensureUniqueVinIndex() {
   await pool.query('ALTER TABLE listings ADD UNIQUE KEY unique_vin (vin)');
 }
 
+async function ensureEquipmentFrequencyTable() {
+  const pool = getPool();
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS equipment_frequency (
+      item    VARCHAR(255) NOT NULL PRIMARY KEY,
+      count   INT          NOT NULL DEFAULT 0
+    )`
+  );
+}
+
 async function runMigrations() {
+  await ensureEquipmentFrequencyTable();
   await ensureListingColumn('report_url', 'VARCHAR(700) NULL AFTER source_url');
   await ensureListingColumn('reviewed_detailed', 'BOOLEAN NOT NULL DEFAULT FALSE AFTER status');
   await ensureListingColumn('contacted', 'BOOLEAN NOT NULL DEFAULT FALSE AFTER reviewed_detailed');

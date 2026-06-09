@@ -796,6 +796,57 @@ textarea {
   width: 220px;
 }
 
+/* --- sekcja wyposażenia w tabeli porównawczej --- */
+.equip-section-header th {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.95rem;
+  padding: 0.45rem 0.75rem;
+  text-align: left;
+  letter-spacing: 0.03em;
+}
+.equip-section-hint {
+  font-weight: 400;
+  font-size: 0.82em;
+  opacity: 0.8;
+}
+.equip-row th.equip-name {
+  font-weight: 500;
+  font-size: 0.88rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: normal;
+}
+.equip-count {
+  font-size: 0.75em;
+  font-weight: 400;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.equip-cell {
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.equip-yes { color: #16a34a; }
+.equip-no  { color: #cbd5e1; }
+
+/* unikalne (tylko 1 auto) – lekkie żółte tło */
+.equip-unique {
+  background: #fefce8;
+}
+.equip-unique th.equip-name {
+  color: #92400e;
+}
+/* powszechne (wszystkie auta) – szare tło */
+.equip-common {
+  background: #f8fafc;
+}
+.equip-common .equip-yes { color: #94a3b8; }
+.equip-common th.equip-name { color: var(--muted); }
+
 @media (max-width: 900px) {
   .hero {
     flex-direction: column;

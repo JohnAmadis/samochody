@@ -447,6 +447,27 @@ function serializeEquipment(equipmentItems) {
   return JSON.stringify(normalized);
 }
 
+async function rebuildEquipmentFrequency(pool) {
+  const [rows] = await pool.query(
+    'SELECT equipment FROM listings WHERE equipment IS NOT NULL AND equipment != ""'
+  );
+  const freq = {};
+  for (const row of rows) {
+    const items = parseListingEquipment(row.equipment);
+    for (const item of items) {
+      freq[item] = (freq[item] || 0) + 1;
+    }
+  }
+  await pool.query('DELETE FROM equipment_frequency');
+  if (Object.keys(freq).length > 0) {
+    const values = Object.entries(freq).map(([item, count]) => [item, count]);
+    await pool.query(
+      'INSERT INTO equipment_frequency (item, count) VALUES ? ON DUPLICATE KEY UPDATE count = count + VALUES(count)',
+      [values]
+    );
+  }
+}
+
 function listingMatchesEquipmentFilter(listingEquipment, includeFilters = []) {
   const listingSet = new Set((listingEquipment || []).map((item) => String(item).toLowerCase()));
   return (includeFilters || []).every((item) => listingSet.has(String(item).toLowerCase()));
@@ -661,7 +682,12 @@ app.get('/compare', async (req, res) => {
       listing.mainImage = images[0] || null;
     }
 
-    res.render('compare', { listings });
+    const [[{ total: totalListings }]] = await pool.query('SELECT COUNT(*) AS total FROM listings');
+    const [freqRows] = await pool.query(
+      'SELECT item, count FROM equipment_frequency ORDER BY count ASC, item ASC'
+    );
+
+    res.render('compare', { listings, equipmentFrequency: freqRows, totalListings });
   } catch (error) {
     res.status(500).send(`Błąd porównania: ${error.message}`);
   }
@@ -986,6 +1012,8 @@ app.post('/import', async (req, res) => {
       [listingId, sourceUrl, scraped.source, true, null]
     );
 
+    await rebuildEquipmentFrequency(pool);
+
     return res.redirect(`/?message=Og%C5%82oszenie%20zaimportowane${originQuery}`);
   } catch (error) {
     const source = detectSource(sourceUrl);
@@ -1071,6 +1099,7 @@ app.post('/listings', async (req, res) => {
     );
 
     await applyCachedRouteToListing(pool, insertResult.insertId, currentOrigin, req.body.location || null);
+    await rebuildEquipmentFrequency(pool);
 
     return res.redirect(`/?message=Dodano%20auto%20r%C4%99cznie${originQuery}`);
   } catch (error) {
@@ -1133,6 +1162,8 @@ app.post('/listings/:id/update', async (req, res) => {
         id
       ]
     );
+
+    await rebuildEquipmentFrequency(pool);
 
     return res.redirect('/?message=Zaktualizowano%20og%C5%82oszenie');
   } catch {
@@ -1391,6 +1422,8 @@ app.post('/listings/:id/refresh', async (req, res) => {
       ]
     );
 
+    await rebuildEquipmentFrequency(pool);
+
     if (wantsJson(req)) {
       return res.json({
         ok: true,
@@ -1415,6 +1448,7 @@ async function startServer() {
   try {
     await waitForDb();
     await initializeDb();
+    await rebuildEquipmentFrequency(getPool());
 
     app.listen(port, () => {
       console.log(`Serwer działa na porcie ${port}`);

@@ -33,16 +33,29 @@
                 </td>
               <% }) %>
             </tr>
-            <% const fields = [
-              ['Wyposażenie', (l) => {
-                if (!l.equipment) return '-';
+            <%
+              // --- budujemy mapę częstości wyposażenia ---
+              const equipmentArrays = listings.map(l => {
+                if (!l.equipment) return [];
                 try {
-                  const parsed = JSON.parse(l.equipment);
-                  return Array.isArray(parsed) && parsed.length ? parsed.join(', ') : '-';
-                } catch {
-                  return l.equipment;
-                }
-              }],
+                  const p = JSON.parse(l.equipment);
+                  return Array.isArray(p) ? p : [];
+                } catch { return []; }
+              });
+              const equipFreq = {};
+              equipmentArrays.forEach(arr => {
+                arr.forEach(item => {
+                  equipFreq[item] = (equipFreq[item] || 0) + 1;
+                });
+              });
+              // union posortowany od najrzadszego do najczęstszego, potem alfabetycznie
+              const sortedEquipment = Object.keys(equipFreq).sort((a, b) => {
+                if (equipFreq[a] !== equipFreq[b]) return equipFreq[a] - equipFreq[b];
+                return a.localeCompare(b, 'pl');
+              });
+            %>
+
+            <% const fields = [
               ['Cena', (l) => l.price ? Number(l.price).toLocaleString('pl-PL') + ' ' + (l.currency || 'PLN') : '-'],
               ['Przebieg', (l) => l.mileage ? Number(l.mileage).toLocaleString('pl-PL') + ' km' : '-'],
               ['Rok produkcji', (l) => l.production_year || '-'],
@@ -74,6 +87,30 @@
                 <% }) %>
               </tr>
             <% }) %>
+
+            <% if (sortedEquipment.length) { %>
+              <tr class="equip-section-header">
+                <th colspan="<%= listings.length + 1 %>">Wyposażenie <span class="equip-section-hint">(od najrzadszego)</span></th>
+              </tr>
+              <% sortedEquipment.forEach(function(item) { %>
+                <%
+                  const count = equipFreq[item];
+                  const isRare   = count === 1;
+                  const isCommon = count === listings.length;
+                %>
+                <tr class="equip-row<%= isRare ? ' equip-unique' : (isCommon ? ' equip-common' : '') %>">
+                  <th class="equip-name">
+                    <%= item %>
+                    <span class="equip-count"><%= count %>/<%= listings.length %></span>
+                  </th>
+                  <% equipmentArrays.forEach(function(arr) { %>
+                    <td class="equip-cell <%= arr.includes(item) ? 'equip-yes' : 'equip-no' %>">
+                      <%= arr.includes(item) ? '✓' : '—' %>
+                    </td>
+                  <% }) %>
+                </tr>
+              <% }) %>
+            <% } %>
           </tbody>
         </table>
       </section>
